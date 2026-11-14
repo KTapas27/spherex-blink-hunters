@@ -8,6 +8,7 @@ Usage (from the project root):
 Exits with status 1 if any view failed, after trying all of them.
 """
 import argparse
+import os
 import sys
 import time
 from pathlib import Path
@@ -53,4 +54,5 @@ for q in queries:
 
 if failed:
     print("FAILED: " + ", ".join(failed))
-    sys.exit(1)
+# Exit at once: background Gaia threads stuck on a slow catalogue service must not keep us alive.
+os._exit(1 if failed else 0)
