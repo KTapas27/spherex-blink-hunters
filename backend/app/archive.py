@@ -1,4 +1,6 @@
 """Find SPHEREx spectral images covering a position and group them into visits."""
+from __future__ import annotations  # allows `X | None` type hints on Python 3.9
+
 import json
 from dataclasses import dataclass
 
