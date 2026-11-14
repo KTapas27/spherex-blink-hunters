@@ -54,4 +54,10 @@ ROOT = Path(__file__).resolve().parents[2]
 CACHE_DIR = Path(os.environ.get("BLINK_CACHE_DIR", ROOT / "cache"))
 STAMP_DIR = CACHE_DIR / "stamps"
 VIEW_DIR = CACHE_DIR / "views"
+SIA_DIR = CACHE_DIR / "sia"  # exposure lists per position, so a new field of view needs no new search
+
+# Exposure-list cache: re-search IRSA after this many hours (new SPHEREx data arrives weekly);
+# if IRSA is down, an older list is used instead of failing.
+SIA_CACHE_HOURS = 12
+SIA_RETRIES = 4  # attempts per search; waits 2, 5, 10 s between them
 FRONTEND_DIR = ROOT / "frontend"
