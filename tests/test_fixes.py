@@ -7,43 +7,38 @@ from app import gaia, astrometry, frames, config, pipeline
 
 ok = lambda c, msg: print(("PASS " if c else "FAIL ") + msg) or (c or sys.exit(1))
 
-# --- Gaia race: slow IRSA, fast MAST -> MAST wins quickly
 def table(n=3):
-    return Table(dict(source_id=np.arange(n), ra=269.446 + np.zeros(n) + np.arange(n) * 1e-3, dec=4.768 + np.zeros(n),
+    return Table(dict(source_id=np.arange(n), ra=269.446 + np.arange(n) * 1e-3, dec=4.768 + np.zeros(n),
                       pmra=[-801.6] + [1.0] * (n - 1), pmdec=[10362.4] + [1.0] * (n - 1),
                       parallax=[547.0] + [1.0] * (n - 1), phot_g_mean_mag=[8.19] + [12.0] * (n - 1)))
-gaia._from_irsa = lambda c, r: (time.sleep(5), table())[1]
-gaia._from_mast = lambda c, r: table(2)
-t0 = time.time(); tab = gaia._query(None, None)
-ok(len(tab) == 2 and time.time() - t0 < 1, f"fast MAST answer used while IRSA is slow ({time.time()-t0:.2f}s)")
 
-# --- one service errors -> the other is used
+# --- Gaia race (DR3 services only; MAST DR2 is the last resort, covered in test_gaia_release.py)
+gaia._from_mast_dr2 = lambda c, r: (_ for _ in ()).throw(ConnectionError("mast down"))
+gaia.DR3_SERVICES = {"IRSA": lambda c, r: (time.sleep(5), table())[1], "ESA": lambda c, r: table(2)}
+t0 = time.time(); tab, ep, rel = gaia._query(None, None)
+ok(len(tab) == 2 and time.time() - t0 < 1 and rel == "Gaia DR3 (ESA)", f"fast DR3 answer used while IRSA is slow ({time.time()-t0:.2f}s)")
 def boom(c, r): raise ConnectionError("down")
-gaia._from_irsa, gaia._from_mast = boom, lambda c, r: table(4)
-ok(len(gaia._query(None, None)) == 4, "IRSA down -> MAST result used")
-
-# --- both fail -> clear error
-gaia._from_irsa = gaia._from_mast = boom
-try: gaia._query(None, None); ok(False, "both down raises")
-except RuntimeError as e: ok("IRSA" in str(e) and "MAST" in str(e), f"both down -> RuntimeError: {e}")
-
-# --- timeout
-gaia.QUERY_TIMEOUT_S = 1
-gaia._from_irsa = gaia._from_mast = lambda c, r: (time.sleep(3), table())[1]
+gaia.DR3_SERVICES = {"IRSA": boom, "VizieR": lambda c, r: table(4)}
+ok(len(gaia._query(None, None)[0]) == 4, "IRSA down -> VizieR result used")
+gaia.DR3_SERVICES = {"IRSA": boom}
+try: gaia._query(None, None); ok(False, "all down raises")
+except RuntimeError as e: ok("IRSA" in str(e) and "MAST" in str(e), f"all down -> RuntimeError: {e}")
+gaia.QUERY_TIMEOUT_S = 1; gaia.MAST_TIMEOUT_S = 1
+gaia.DR3_SERVICES = {"IRSA": lambda c, r: (time.sleep(3), table())[1]}
 try: gaia._query(None, None); ok(False, "timeout raises")
-except RuntimeError as e: ok("no answer" in str(e), f"neither answers -> {e}")
-gaia.QUERY_TIMEOUT_S = 90
+except RuntimeError as e: ok("no answer" in str(e), f"nobody answers in time -> {e}")
+gaia.QUERY_TIMEOUT_S = 75
 
 # --- sources_for_view: concurrent prefetch + click query only once, output + cache
 calls = []
 def counted(c, r): calls.append(1); time.sleep(0.5); return table(3)
-gaia._from_irsa = gaia._from_mast = counted
+gaia.DR3_SERVICES = {'IRSA': counted, 'ESA': counted}
 d = Path(tempfile.mkdtemp()); manifest = dict(target=dict(ra=269.446, dec=4.768), fov_deg=0.1)
 gaia.prefetch(d, manifest)
 time.sleep(0.05)
 res = gaia.sources_for_view(d, manifest)
 time.sleep(0.6)
-ok(len(calls) == 2 and (d / "gaia.json").exists(), f"prefetch + click share one query round (calls={len(calls)}: IRSA+MAST once)")
+ok(len(calls) == 2 and (d / "gaia.json").exists(), f"prefetch + click share one query round (calls={len(calls)}: both DR3 services once)")
 fast = [s for s in res if s["fast"]]
 ok(len(fast) == 1 and abs(fast[0]["pm"] - 10393.4) < 1 and fast[0]["dy_per_yr"] > 1.6, f"Barnard flagged fast, pm={fast[0]['pm']}, dy/yr={fast[0]['dy_per_yr']:.2f} px")
 calls.clear(); gaia.sources_for_view(d, manifest); ok(not calls, "second request served from cache")
