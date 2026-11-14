@@ -58,6 +58,18 @@
       <div class="seg" id="mode" role="tablist">
         <button data-mode="blink" class="on">Blink</button>
         <button data-mode="diff">Difference</button>
+        <button data-mode="combine">Add / subtract</button>
+      </div>
+      <div id="refRow" class="subctl" hidden>
+        <label class="inline">Compared with
+          <select id="ref"></select>
+        </label>
+        <p class="muted small">Each frame shows what changed: bright = brighter (or arrived), dark = fainter (or left).</p>
+      </div>
+      <div id="comboRow" class="subctl" hidden>
+        <div class="seg combo" id="combo"></div>
+        <p class="muted small">Tap a visit to cycle <b>+</b> add, <b>−</b> subtract, off. Only <b>+</b>: a deep stack
+          for faint objects. <b>+</b> and <b>−</b>: what differs between the two sets.</p>
       </div>
       <div class="seg dets" id="dets"></div>
       <div class="matched">
