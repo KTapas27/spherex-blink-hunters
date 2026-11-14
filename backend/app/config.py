@@ -1,4 +1,5 @@
 """Settings that change with SPHEREx data releases live here, in one place."""
+import os
 from pathlib import Path
 
 # IRSA SIA collections, newest first. When a new release lands (DR2, QR4...),
@@ -49,7 +50,8 @@ SESAME_URL = "https://cds.unistra.fr/cgi-bin/nph-sesame/-oxp/SNV?"
 VIEW_EPOCH = "2026-01-01"
 
 ROOT = Path(__file__).resolve().parents[2]
-CACHE_DIR = ROOT / "cache"
+# BLINK_CACHE_DIR lets a deployment (e.g. Cloud Run) put the cache somewhere else.
+CACHE_DIR = Path(os.environ.get("BLINK_CACHE_DIR", ROOT / "cache"))
 STAMP_DIR = CACHE_DIR / "stamps"
 VIEW_DIR = CACHE_DIR / "views"
 FRONTEND_DIR = ROOT / "frontend"

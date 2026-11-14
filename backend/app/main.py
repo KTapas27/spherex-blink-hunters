@@ -19,6 +19,12 @@ class ViewRequest(BaseModel):
     per_group: int = Field(6, ge=0, le=200, description="Max exposures per visit+detector (0 = all)")
 
 
+@app.get("/api/health")
+def health():
+    """Liveness check for the hosting platform."""
+    return {"ok": True, "cached_views": sum(1 for _ in config.VIEW_DIR.glob("*/manifest.json"))}
+
+
 @app.get("/api/presets")
 def presets():
     return pipeline.PRESETS
