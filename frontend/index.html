@@ -110,6 +110,7 @@
       <div class="card">
         <h2>Spectrum <span id="specWhere" class="muted"></span></h2>
         <div id="specEmpty" class="muted">Click an object in the image.</div>
+        <p id="specWarn" class="warn" hidden></p>
         <canvas id="spec" height="220" hidden></canvas>
       </div>
       <div class="card">
@@ -122,12 +123,13 @@
       <div class="card">
         <h2>Position over time <span id="posWhere" class="muted"></span></h2>
         <div id="posEmpty" class="muted">Click an object: a mover drifts between visits, a fixed star doesn't.</div>
+        <p id="posWarn" class="warn" hidden></p>
         <canvas id="pos" height="200" hidden></canvas>
         <p class="muted small">East–west offset of the light centre (″, + = east) per detector. If short and long
           wavelengths disagree, two objects may be blended in one 6″ pixel.</p>
       </div>
       <div class="card">
-        <h2>Context <span class="muted">Aladin · Gaia DR3</span></h2>
+        <h2>Context <span class="muted" id="aladinNote">Aladin · Gaia DR3</span></h2>
         <div id="aladin"></div>
       </div>
     </section>
