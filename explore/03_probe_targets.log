@@ -1,0 +1,65 @@
+
+=== Barnard's Star (Barnard's Star) ===
+  J2000 17h57m48.5s +04d41m36.1s
+  pm = (-802, 10362) mas/yr, parallax = 546.9759 mas
+  moved 270.2 arcsec (= 43.9 SPHEREx pixels) from J2000 to 2026.0
+  SIA: 358 images in 4.3 s
+    collection spherex_dr1: 239
+    collection spherex_qr3: 119
+  per detector: {'SPHEREx-D1': 60, 'SPHEREx-D2': 61, 'SPHEREx-D3': 59, 'SPHEREx-D4': 59, 'SPHEREx-D5': 61, 'SPHEREx-D6': 58}
+    visit 2025-08-15 .. 2025-10-01: 118 images
+    visit 2026-03-11 .. 2026-05-05: 121 images
+    visit 2026-08-16 .. 2026-09-22: 119 images
+  full-image download if fetched whole: 21.3 GB
+
+=== Epsilon Indi B (eps Ind B) ===
+  J2000 22h04m10.6s -56d46m58.2s
+  pm = (3982, -2467) mas/yr, parallax = 270.658 mas
+  moved 121.8 arcsec (= 19.8 SPHEREx pixels) from J2000 to 2026.0
+  SIA: 458 images in 4.1 s
+    collection spherex_dr1: 338
+    collection spherex_qr3: 120
+  per detector: {'SPHEREx-D1': 46, 'SPHEREx-D2': 93, 'SPHEREx-D3': 96, 'SPHEREx-D4': 46, 'SPHEREx-D5': 84, 'SPHEREx-D6': 93}
+    visit 2025-04-24 .. 2025-06-10: 118 images
+    visit 2025-09-28 .. 2025-11-12: 146 images
+    visit 2026-04-18 .. 2026-05-04: 74 images
+    visit 2026-09-22 .. 2026-10-02: 120 images
+  full-image download if fetched whole: 29.2 GB
+
+=== WISE 0855 (WISE J085510.83-071442.5) ===
+  J2000 08h55m16.5s -07d14m49.4s
+  pm = (-8124, 673) mas/yr, parallax = 439.0 mas
+  moved 211.9 arcsec (= 34.5 SPHEREx pixels) from J2000 to 2026.0
+  SIA: 258 images in 2.6 s
+    collection spherex_dr1: 258
+  per detector: {'SPHEREx-D1': 36, 'SPHEREx-D2': 48, 'SPHEREx-D3': 45, 'SPHEREx-D4': 36, 'SPHEREx-D5': 48, 'SPHEREx-D6': 45}
+    visit 2025-05-05 .. 2025-05-06: 30 images
+    visit 2025-10-31 .. 2025-12-13: 128 images
+    visit 2026-04-21 .. 2026-05-14: 100 images
+  full-image download if fetched whole: 16.2 GB
+
+=== RW Aurigae (RW Aur) ===
+  J2000 05h07m49.6s +30d24m05.2s
+  pm = (7, -20) mas/yr, parallax = 15.42 mas
+  moved 0.6 arcsec (= 0.1 SPHEREx pixels) from J2000 to 2026.0
+  SIA: 335 images in 3.4 s
+    collection spherex_dr1: 226
+    collection spherex_qr3: 109
+  per detector: {'SPHEREx-D1': 56, 'SPHEREx-D2': 55, 'SPHEREx-D3': 56, 'SPHEREx-D4': 56, 'SPHEREx-D5': 56, 'SPHEREx-D6': 56}
+    visit 2025-09-01 .. 2025-09-20: 112 images
+    visit 2026-02-20 .. 2026-03-12: 114 images
+    visit 2026-09-02 .. 2026-09-16: 109 images
+  full-image download if fetched whole: 20.6 GB
+
+=== R Draconis (R Dra) ===
+  J2000 16h32m40.2s +66d45m17.9s
+  pm = (-21, 6) mas/yr, parallax = 1.2509 mas
+  moved 0.6 arcsec (= 0.1 SPHEREx pixels) from J2000 to 2026.0
+  SIA: 539 images in 8.7 s
+    collection spherex_dr1: 413
+    collection spherex_qr3: 126
+  per detector: {'SPHEREx-D1': 91, 'SPHEREx-D2': 89, 'SPHEREx-D3': 91, 'SPHEREx-D4': 88, 'SPHEREx-D5': 89, 'SPHEREx-D6': 91}
+    visit 2025-05-16 .. 2025-07-22: 153 images
+    visit 2025-10-17 .. 2026-01-13: 212 images
+    visit 2026-04-22 .. 2026-07-16: 174 images
+  full-image download if fetched whole: 33.9 GB

@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Blink Hunters</title>
+  <meta name="description" content="Blink SPHEREx infrared sky images over time to spot moving and changing objects.">
+  <meta name="ai-assistance" content="Code written with an AI coding assistant (Claude) at the team's direction; see README.md">
+  <link rel="stylesheet" href="style.css">
+  <script type="module">
+    // Aladin Lite ships as an ES module; expose it as window.A for app.js.
+    import A from "https://cdn.jsdelivr.net/npm/aladin-lite@3.6.5/dist/aladin.js";
+    window.A = A;
+    window.dispatchEvent(new Event("aladin-ready"));
+  </script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" defer></script>
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <aside id="panel">
+    <header>
+      <h1>Blink Hunters</h1>
+      <p class="sub">SPHEREx sky time-lapse · 0.75–5 µm</p>
+    </header>
+
+    <form id="search">
+      <label for="q">Object name or RA Dec</label>
+      <input id="q" name="q" placeholder="e.g. Barnard's Star or 08h55m10.8s -07d14m42s" autocomplete="off" required>
+      <div class="row">
+        <label>Field of view
+          <select id="fov">
+            <option value="0.05">3′</option>
+            <option value="0.1" selected>6′</option>
+            <option value="0.2">12′</option>
+            <option value="0.3">18′</option>
+          </select>
+        </label>
+        <label>Exposures / visit / detector
+          <select id="per_group">
+            <option value="2">2 (fast)</option>
+            <option value="6" selected>6</option>
+            <option value="15">15</option>
+            <option value="0">all (slow)</option>
+          </select>
+        </label>
+      </div>
+      <button type="submit" id="go">Load sky</button>
+    </form>
+
+    <div id="presets" class="chips" aria-label="Test targets"></div>
+
+    <div id="status" hidden>
+      <div class="msg"></div>
+      <div class="bar"><div></div></div>
+    </div>
+
+    <section id="controls" hidden>
+      <div class="seg" id="mode" role="tablist">
+        <button data-mode="blink" class="on">Blink</button>
+        <button data-mode="diff">Difference</button>
+      </div>
+      <div class="seg dets" id="dets"></div>
+      <div class="matched">
+        <label class="inline"><input type="checkbox" id="matched"> Match wavelength across visits</label>
+        <select id="channel" disabled title="Pick a detector first"></select>
+        <p class="muted small" id="matchedNote">Each visit sees the target at different wavelengths. Matching them means
+          a change you see is real, not just the object's colour.</p>
+      </div>
+      <label>Blink speed <span id="speedVal"></span>
+        <input type="range" id="speed" min="150" max="2000" step="50" value="600">
+      </label>
+      <label>Zoom
+        <input type="range" id="zoom" min="2" max="12" step="1" value="7">
+      </label>
+      <div class="toggles">
+        <label><input type="checkbox" id="invert"> Invert</label>
+        <label><input type="checkbox" id="flags"> Show flagged pixels</label>
+        <label><input type="checkbox" id="cross" checked> Crosshair</label>
+        <label><input type="checkbox" id="gaia"> Gaia DR3 overlay <span class="muted" id="gaiaNote"></span></label>
+      </div>
+    </section>
+
+    <section id="info" hidden></section>
+  </aside>
+
+  <main>
+    <section id="viewer">
+      <div class="frame-head">
+        <div id="frameLabel">Pick a target to start</div>
+        <div class="player">
+          <button id="prev" title="Previous frame">◀</button>
+          <button id="play" title="Play / pause">❚❚</button>
+          <button id="next" title="Next frame">▶</button>
+        </div>
+      </div>
+      <div id="stage">
+        <div id="canvasWrap">
+          <img id="frame" alt="SPHEREx frame" hidden>
+          <img id="mask" alt="" hidden>
+          <svg id="gaiaLayer" hidden></svg>
+          <div id="crosshair"></div>
+          <div id="clickMark" hidden></div>
+        </div>
+        <p class="hint" id="hint">Tip: click any object in the image to build its spectrum from every exposure.</p>
+      </div>
+      <div id="timeline"></div>
+    </section>
+
+    <section id="side">
+      <div class="card">
+        <h2>Spectrum <span id="specWhere" class="muted"></span></h2>
+        <div id="specEmpty" class="muted">Click an object in the image.</div>
+        <canvas id="spec" height="220" hidden></canvas>
+      </div>
+      <div class="card">
+        <h2>Brightness over time <span id="lcWhere" class="muted"></span></h2>
+        <div id="lcEmpty" class="muted">Click an object to see how it changes between visits.</div>
+        <canvas id="lc" height="200" hidden></canvas>
+        <p class="muted small">Changes are <b>candidates</b>: compare within one detector or wavelength channel, and
+          check the flag overlay before calling anything a discovery.</p>
+      </div>
+      <div class="card">
+        <h2>Position over time <span id="posWhere" class="muted"></span></h2>
+        <div id="posEmpty" class="muted">Click an object: a mover drifts between visits, a fixed star doesn't.</div>
+        <canvas id="pos" height="200" hidden></canvas>
+        <p class="muted small">East–west offset of the light centre (″, + = east) per detector. If short and long
+          wavelengths disagree, two objects may be blended in one 6″ pixel.</p>
+      </div>
+      <div class="card">
+        <h2>Context <span class="muted">Aladin · Gaia DR3</span></h2>
+        <div id="aladin"></div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

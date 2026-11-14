@@ -1,0 +1,6 @@
+# Extra packages for the analysis notebook (not needed to run the web app)
+-r requirements.txt
+jupyterlab
+ipykernel
+nbconvert
+nbformat

@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+*.pyc
+cache/
+*.fits
+.DS_Store
+
+# Third-party downloads (CSA NEOSSat tutorial copy); fetch from the source instead
+explore/data/neossat/
