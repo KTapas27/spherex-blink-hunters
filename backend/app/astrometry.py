@@ -14,6 +14,9 @@ from .frames import grid_wcs
 
 RADIUS_PX = 3.0
 BKG_RING_PX = (6.0, 15.0)
+# If more than this fraction of the centroid aperture is masked (a saturated, flagged core), the
+# light centre is meaningless: it snaps to the edge of the hole. Such points are marked saturated.
+MAX_MASKED_FRACTION = 0.15
 
 
 def _centroid(stack, x0, y0):
@@ -22,10 +25,14 @@ def _centroid(stack, x0, y0):
     ring = (r > BKG_RING_PX[0]) & (r < BKG_RING_PX[1]) & np.isfinite(stack)
     if ring.sum() < 10:
         return None
-    w = np.where((r <= RADIUS_PX) & np.isfinite(stack), np.clip(stack - np.median(stack[ring]), 0, None), 0.0)
-    if w.sum() <= 0 or (r <= RADIUS_PX).sum() == 0:
+    inside = r <= RADIUS_PX
+    if inside.sum() == 0:
         return None
-    return float((w * xx).sum() / w.sum()), float((w * yy).sum() / w.sum())
+    masked = float((~np.isfinite(stack[inside])).mean())
+    w = np.where(inside & np.isfinite(stack), np.clip(stack - np.median(stack[ring]), 0, None), 0.0)
+    if w.sum() <= 0:
+        return None
+    return float((w * xx).sum() / w.sum()), float((w * yy).sum() / w.sum()), masked
 
 
 def positions(view_dir, ra, dec):
@@ -50,5 +57,7 @@ def positions(view_dir, ra, dec):
                 # Grid x grows westward (RA decreasing), y grows north.
                 out.append(dict(detector=det, visit=visit, mjd=mid[visit],
                                 east_arcsec=round(-(c[0] - x0) * scale, 2),
-                                north_arcsec=round((c[1] - y0) * scale, 2)))
+                                north_arcsec=round((c[1] - y0) * scale, 2),
+                                masked_fraction=round(c[2], 2),
+                                saturated=c[2] > MAX_MASKED_FRACTION))
     return out

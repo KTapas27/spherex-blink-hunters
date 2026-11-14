@@ -284,12 +284,23 @@ function drawLightCurve() {
   });
 }
 
-function drawPositions(points) {
+function drawPositions(allPoints) {
+  // Light centres measured over a saturated (masked) core are meaningless, so leave them out.
+  const points = allPoints.filter((p) => !p.saturated);
+  const dropped = [...new Set(allPoints.filter((p) => p.saturated).map((p) => `D${p.detector}`))].sort();
   $("#pos").hidden = !points.length;
   $("#posEmpty").hidden = points.length > 0;
   $("#posWhere").textContent = points.length ? `${points.length} measurements` : "";
+  $("#posWarn").hidden = !dropped.length;
+  $("#posWarn").textContent = dropped.length
+    ? `Left out ${dropped.join(", ")}: the star is saturated there, so its light centre can't be measured.` : "";
   if (state.posChart) state.posChart.destroy();
-  if (!points.length) return;
+  if (!points.length) {
+    $("#posEmpty").textContent = allPoints.length
+      ? "Saturated in every detector here; use the difference images to see this star move."
+      : "Click an object: a mover drifts between visits, a fixed star doesn't.";
+    return;
+  }
   const dets = [...new Set(points.map((p) => p.detector))].sort();
   const datasets = dets.map((d) => ({
     label: `D${d}`, showLine: true, borderColor: DET_COLORS[d], backgroundColor: DET_COLORS[d], pointRadius: 3,
@@ -316,6 +327,16 @@ function drawPositions(points) {
 function drawSpectrum(points, nFlagged = 0) {
   state.lastPoints = points;
   drawLightCurve();
+  // Saturated stars lose most exposures to flags; say so instead of showing a few lonely points.
+  const total = points.length + nFlagged;
+  const warn = $("#specWarn");
+  warn.hidden = !(points.length && nFlagged > points.length);
+  if (!warn.hidden) {
+    const dets = [...new Set(points.map((p) => `D${p.detector}`))].sort().join(", ");
+    warn.textContent = `Saturated: flagged in ${nFlagged} of ${total} exposures, so only ${points.length} ` +
+      `clean measurements (${dets}). This object is too bright for reliable brightness or spectra; ` +
+      `use the images, or click a fainter star.`;
+  }
   $("#specEmpty").hidden = points.length > 0;
   $("#spec").hidden = !points.length;
   if (!points.length) {
@@ -350,35 +371,47 @@ function resetSpectrum() {
   drawPositions([]);
   $("#clickMark").hidden = true;
   $("#spec").hidden = true;
+  $("#specWarn").hidden = true;
   $("#specEmpty").hidden = false;
   $("#specEmpty").textContent = "Click an object in the image.";
   $("#specWhere").textContent = "";
 }
 
 // ---------- Gaia DR3 overlay drawn on the SPHEREx image (positions at epoch 2026.0) ----------
+// One request per view, shared by the overlay and the Aladin panel. The backend starts fetching
+// Gaia as soon as a view is built, so this is usually instant.
+function loadGaia(m) {
+  if (state.gaiaKey === m.key && state.gaiaPromise) return state.gaiaPromise;
+  state.gaiaKey = m.key;
+  state.gaia = null;
+  state.gaiaPromise = api(`/api/views/${m.key}/gaia`)
+    .then((res) => { if (state.gaiaKey === m.key) state.gaia = res.sources; return res.sources; })
+    .catch((err) => { if (state.gaiaKey === m.key) { state.gaia = []; state.gaiaPromise = null; } throw err; });
+  return state.gaiaPromise;
+}
+
 async function toggleGaia() {
   const m = state.manifest;
   if (!$("#gaia").checked || !m) { drawGaia(); return; }
-  if (state.gaiaKey !== m.key) {
+  if (!(state.gaiaKey === m.key && state.gaia)) {
     $("#gaiaNote").textContent = "loading…";
     try {
-      const res = await api(`/api/views/${m.key}/gaia`);
-      state.gaia = res.sources;
-      state.gaiaKey = m.key;
-      const fast = res.sources.filter((s) => s.fast).length;
-      $("#gaiaNote").textContent = `${res.sources.length} stars${fast ? `, ${fast} fast` : ""}`;
+      await loadGaia(m);
     } catch (err) {
-      $("#gaiaNote").textContent = "unavailable";
-      state.gaia = [];
+      $("#gaiaNote").textContent = "unavailable (catalogue servers busy; try again)";
+      drawGaia();
+      return;
     }
   }
+  const fast = state.gaia.filter((s) => s.fast).length;
+  $("#gaiaNote").textContent = `${state.gaia.length} stars${fast ? `, ${fast} fast` : ""}`;
   drawGaia();
 }
 
 function drawGaia() {
   const svg = $("#gaiaLayer");
   const m = state.manifest;
-  const hide = !$("#gaia").checked || !m || state.gaiaKey !== m?.key;
+  const hide = !$("#gaia").checked || !m || state.gaiaKey !== m?.key || !state.gaia;
   svg.toggleAttribute("hidden", hide); // SVG elements have no .hidden property
   if (hide) return;
   const zoom = +$("#zoom").value, n = m.shape[0];
@@ -396,27 +429,79 @@ function drawGaia() {
   }).join("");
 }
 
-// ---------- Aladin context view with Gaia DR3 ----------
-function updateAladin(m) {
+// ---------- Aladin context view (AllWISE colour) with Gaia DR3 ----------
+// CDS's own tile servers are often unreachable, so try IRSA's mirrors of the same surveys first.
+// Each candidate is probed by loading one all-sky tile; the first that answers is used.
+const HIPS_CANDIDATES = [
+  { url: "https://irsa.ipac.caltech.edu/data/hips/CDS/AllWISE/RGB-W4-W2-W1", name: "AllWISE colour (W1/W2/W4)" },
+  { url: "https://irsa.ipac.caltech.edu/data/hips/CDS/2MASS/Color", name: "2MASS colour (J/H/K)" },
+  { url: "https://alasky.cds.unistra.fr/AllWISE/RGB-W4-W2-W1", name: "AllWISE colour (W1/W2/W4)" },
+];
+let hipsChoice; // promise of the first candidate that loads, or null
+
+function probeTile(base, ms = 6000) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    const timer = setTimeout(() => resolve(false), ms);
+    img.onload = () => { clearTimeout(timer); resolve(true); };
+    img.onerror = () => { clearTimeout(timer); resolve(false); };
+    img.src = `${base}/Norder3/Dir0/Npix0.jpg`;
+  });
+}
+
+function pickHips() {
+  hipsChoice ||= (async () => {
+    for (const c of HIPS_CANDIDATES) if (await probeTile(c.url)) return c;
+    return null;
+  })();
+  return hipsChoice;
+}
+
+function aladinNote(text) {
+  $("#aladinNote").textContent = text;
+}
+
+async function updateAladin(m) {
   if (typeof A === "undefined") { // module still loading (or CDN down): retry once it arrives
+    aladinNote("loading…");
     window.addEventListener("aladin-ready", () => updateAladin(m), { once: true });
     return;
   }
   const { ra, dec } = m.target;
-  A.init.then(() => {
+  const hips = await pickHips();
+  if (!hips) {
+    $("#aladin").hidden = true;
+    aladinNote("sky survey servers unreachable right now");
+    return;
+  }
+  $("#aladin").hidden = false;
+  aladinNote(`${hips.name} · Gaia DR3`);
+  try {
+    await A.init;
     if (!state.aladin) {
       state.aladin = A.aladin("#aladin", {
-        survey: "P/allWISE/color", fov: m.fov_deg * 2, target: `${ra} ${dec}`,
+        fov: m.fov_deg * 2, target: `${ra} ${dec}`,
         showReticle: true, showCooGridControl: false, showProjectionControl: false, showFullscreenControl: true,
       });
+      state.aladin.setBaseImageLayer(A.imageHiPS(hips.url, { name: hips.name, imgFormat: "jpeg" }));
     } else {
       try { state.aladin.removeLayers(); } catch (_) { /* older API */ }
       state.aladin.gotoRaDec(ra, dec);
       state.aladin.setFoV(m.fov_deg * 2);
     }
-    const gaia = A.catalogFromVizieR("I/355/gaiadr3", `${ra} ${dec}`, m.fov_deg * 0.75,
-      { sourceSize: 10, color: "#ffd43b", onClick: "showTable" });
-    state.aladin.addCatalog(gaia);
+  } catch (err) {
+    aladinNote("context view unavailable");
+    return;
+  }
+  // Gaia stars come from our own backend (IRSA/MAST), not CDS VizieR, which is often down.
+  loadGaia(m).then((sources) => {
+    if (!sources.length || state.manifest?.key !== m.key || !state.aladin) return;
+    const cat = A.catalog({ name: "Gaia DR3 (epoch 2026.0)", sourceSize: 10, color: "#ffd43b", onClick: "showTable" });
+    cat.addSources(sources.map((s) => {
+      const { ra: sra, dec: sdec } = pixelToSky(s.x + 1, s.y + 1);
+      return A.source(sra, sdec, { G: s.g, pm_mas_yr: s.pm, gaia_id: s.id });
+    }));
+    state.aladin.addCatalog(cat);
   }).catch(() => {});
 }
 

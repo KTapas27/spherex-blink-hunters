@@ -1,9 +1,14 @@
 """Gaia DR3 sources for a view, moved to the SPHEREx epoch, in view pixel coordinates.
 
-Uses IRSA's indexed cone search (fast), falling back to MAST; ESA and CDS were slow or
-unreachable during development.
+IRSA's indexed cone search and MAST are queried at the same time and the first answer wins:
+either one can be slow (IRSA took ~100 s from the UAE during testing) and ESA/CDS were often
+unreachable. Results are cached per view, and pipeline.py starts the query as soon as a view
+is built, so the overlay is usually ready before anyone ticks the box.
 """
+import concurrent.futures
 import json
+import logging
+import threading
 
 import astropy.units as u
 import numpy as np
@@ -18,20 +23,72 @@ from .frames import grid_wcs
 GAIA_EPOCH = 2016.0
 MAX_SOURCES = 600
 FAST_PM_MAS = 100  # highlight sources moving faster than this
+QUERY_TIMEOUT_S = 90  # give up if neither IRSA nor MAST has answered by then
+
+log = logging.getLogger(__name__)
+_pool = concurrent.futures.ThreadPoolExecutor(max_workers=6, thread_name_prefix="gaia")
+_view_locks = {}
+_locks_guard = threading.Lock()
+
+COLUMNS = "source_id,ra,dec,pmra,pmdec,parallax,phot_g_mean_mag"
+
+
+def _from_irsa(centre, radius):
+    return Irsa.query_region(centre, catalog="gaia_dr3_source", spatial="Cone", radius=radius, columns=COLUMNS)
+
+
+def _from_mast(centre, radius):
+    return Catalogs.query_region(centre, radius=radius, catalog="Gaia", version=3)
+
+
+def _query(centre, radius):
+    """Ask IRSA and MAST in parallel; return the first table that arrives without error."""
+    futures = {_pool.submit(_from_irsa, centre, radius): "IRSA", _pool.submit(_from_mast, centre, radius): "MAST"}
+    errors = []
+    try:
+        for fut in concurrent.futures.as_completed(futures, timeout=QUERY_TIMEOUT_S):
+            try:
+                tab = fut.result()
+            except Exception as err:  # network errors vary; try the other service
+                errors.append(f"{futures[fut]}: {err}")
+                continue
+            log.info("Gaia DR3 from %s: %d rows", futures[fut], len(tab))
+            return tab
+    except concurrent.futures.TimeoutError:
+        errors.append(f"no answer within {QUERY_TIMEOUT_S} s")
+    raise RuntimeError("Gaia query failed (" + "; ".join(errors) + ")")
+
+
+def _lock_for(view_dir):
+    with _locks_guard:
+        return _view_locks.setdefault(str(view_dir), threading.Lock())
+
+
+def prefetch(view_dir, manifest):
+    """Start fetching Gaia for a view in the background (errors are only logged)."""
+    def run():
+        try:
+            sources_for_view(view_dir, manifest)
+        except Exception as err:
+            log.warning("Gaia prefetch for %s failed: %s", view_dir.name, err)
+    _pool.submit(run)
 
 
 def sources_for_view(view_dir, manifest):
     cache = view_dir / "gaia.json"
     if cache.exists():
         return json.loads(cache.read_text())
+    with _lock_for(view_dir):  # the prefetch and a user click must not query twice
+        if cache.exists():
+            return json.loads(cache.read_text())
+        return _build(view_dir, manifest, cache)
+
+
+def _build(view_dir, manifest, cache):
     t = manifest["target"]
     fov = manifest["fov_deg"]
     centre, radius = SkyCoord(t["ra"], t["dec"], unit="deg"), fov * 0.75 * u.deg
-    try:
-        tab = Irsa.query_region(centre, catalog="gaia_dr3_source", spatial="Cone", radius=radius,
-                                columns="source_id,ra,dec,pmra,pmdec,parallax,phot_g_mean_mag")
-    except Exception:  # IRSA busy: same Gaia DR3 columns from MAST
-        tab = Catalogs.query_region(centre, radius=radius, catalog="Gaia", version=3)
+    tab = _query(centre, radius)
     tab = tab[np.isfinite(np.asarray(tab["phot_g_mean_mag"], dtype=float))]
     tab.sort("phot_g_mean_mag")
     tab = tab[:MAX_SOURCES]

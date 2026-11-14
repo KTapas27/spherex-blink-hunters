@@ -11,7 +11,7 @@ from types import SimpleNamespace
 
 import numpy as np
 
-from . import archive, config, fetch, frames, resolve, spectrum
+from . import archive, config, fetch, frames, gaia, resolve, spectrum
 
 log = logging.getLogger(__name__)
 
@@ -62,6 +62,7 @@ def _run(key, target, fov_deg, per_group):
                         n_available=len(exposures), elapsed_s=round(time.time() - t0, 1))
         (config.VIEW_DIR / key / "manifest.json").write_text(json.dumps(manifest, indent=1))
         _set(key, status="done", message="Ready", manifest=manifest)
+        gaia.prefetch(config.VIEW_DIR / key, manifest)  # so the Gaia overlay is ready when asked for
     except Exception as err:
         log.error("view %s failed: %s", key, traceback.format_exc())
         _set(key, status="error", message=str(err))
@@ -72,7 +73,9 @@ def start_view(query, fov_deg=0.1, per_group=6):
     key = view_key(target, fov_deg, per_group)
     cached = config.VIEW_DIR / key / "manifest.json"
     if cached.exists():
-        _set(key, status="done", message="Ready (cached)", manifest=json.loads(cached.read_text()))
+        manifest = json.loads(cached.read_text())
+        _set(key, status="done", message="Ready (cached)", manifest=manifest)
+        gaia.prefetch(config.VIEW_DIR / key, manifest)  # no-op if gaia.json is already cached
     else:
         with _lock:
             running = _jobs.get(key, {}).get("status") not in (None, "done", "error")
