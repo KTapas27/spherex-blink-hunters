@@ -482,7 +482,8 @@ async function toggleGaia() {
     }
   }
   const fast = state.gaia.filter((s) => s.fast).length;
-  $("#gaiaNote").textContent = `${state.gaia.length} stars${fast ? `, ${fast} fast` : ""}`;
+  const rel = state.gaia[0]?.release?.startsWith("Gaia DR2") ? " (Gaia DR2: DR3 services unreachable)" : "";
+  $("#gaiaNote").textContent = `${state.gaia.length} stars${fast ? `, ${fast} fast` : ""}${rel}`;
   drawGaia();
 }
 
@@ -498,7 +499,7 @@ function drawGaia() {
   const GAIA_MAX_G = 17; // fainter stars clutter the view; fast movers are always shown
   svg.innerHTML = state.gaia.filter((s) => s.fast || s.g <= GAIA_MAX_G).map((s) => {
     const r = Math.max(3, 9 - (s.g - 8) * 0.6);
-    const title = `<title>Gaia DR3 ${s.id}\nG=${s.g}  pm=${s.pm} mas/yr${s.parallax ? `  plx=${s.parallax} mas` : ""}</title>`;
+    const title = `<title>${(s.release || "Gaia DR3").split(" (")[0]} ${s.id}\nG=${s.g}  pm=${s.pm} mas/yr${s.parallax ? `  plx=${s.parallax} mas` : ""}</title>`;
     if (!s.fast) return `<g><circle cx="${X(s.x)}" cy="${Y(s.y)}" r="${r}">${title}</circle></g>`;
     const x2 = X(s.x + s.dx_per_yr * ARROW_YEARS), y2 = Y(s.y + s.dy_per_yr * ARROW_YEARS);
     return `<g class="fast"><circle cx="${X(s.x)}" cy="${Y(s.y)}" r="${r + 3}">${title}</circle>` +
@@ -574,7 +575,7 @@ async function updateAladin(m) {
   // Gaia stars come from our own backend (IRSA/MAST), not CDS VizieR, which is often down.
   loadGaia(m).then((sources) => {
     if (!sources.length || state.manifest?.key !== m.key || !state.aladin) return;
-    const cat = A.catalog({ name: "Gaia DR3 (epoch 2026.0)", sourceSize: 10, color: "#ffd43b", onClick: "showTable" });
+    const cat = A.catalog({ name: `${(sources[0]?.release || "Gaia DR3").split(" (")[0]} (epoch 2026.0)`, sourceSize: 10, color: "#ffd43b", onClick: "showTable" });
     cat.addSources(sources.map((s) => {
       const { ra: sra, dec: sdec } = pixelToSky(s.x + 1, s.y + 1);
       return A.source(sra, sdec, { G: s.g, pm_mas_yr: s.pm, gaia_id: s.id });
