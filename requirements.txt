@@ -1,0 +1,14 @@
+numpy
+astropy
+astroquery
+pyvo
+reproject
+photutils
+fsspec
+s3fs
+aiohttp
+requests
+matplotlib
+pillow
+fastapi
+uvicorn[standard]
