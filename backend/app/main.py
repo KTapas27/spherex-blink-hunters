@@ -5,7 +5,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import astrometry, config, gaia, pipeline, resolve
+from . import astrometry, combine, config, gaia, pipeline, resolve
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
@@ -82,6 +82,20 @@ def get_gaia(key: str):
                 "sources": gaia.sources_for_view(config.VIEW_DIR / key, state["manifest"])}
     except Exception as err:
         raise HTTPException(502, f"Gaia query failed: {err}")
+
+
+@app.get("/api/views/{key}/combine")
+def get_combine(key: str, group: str = Query("all"), plus: str = Query(..., description="visits to add, e.g. 0,2"),
+                minus: str = Query("", description="visits to subtract, e.g. 1")):
+    """Add and/or subtract any visits (numbered from 0) of one frame group; returns the PNG name."""
+    state = pipeline.job(key)
+    if not state or state.get("status") != "done":
+        raise HTTPException(409, "View is not ready")
+    try:
+        to_list = lambda s: [int(x) for x in s.split(",") if x.strip() != ""]
+        return combine.combine(config.VIEW_DIR / key, state["manifest"], group, to_list(plus), to_list(minus))
+    except (combine.CombineError, ValueError) as err:
+        raise HTTPException(400, str(err))
 
 
 app.mount("/views", StaticFiles(directory=config.VIEW_DIR), name="views")

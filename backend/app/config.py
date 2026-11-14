@@ -25,7 +25,7 @@ DETECTOR_BANDS = {
 CHANNELS_PER_DETECTOR = 17
 
 # Bump when the frame/manifest format changes so cached views are rebuilt (stamps are reused).
-VIEW_VERSION = 2
+VIEW_VERSION = 3  # 3: colour composite + per-visit weights for add/subtract
 
 # Exposures closer together than this belong to the same "visit" of the sky.
 VISIT_GAP_DAYS = 30

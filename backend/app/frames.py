@@ -1,4 +1,10 @@
-"""Align stamps onto one sky grid, combine them per visit, render blink/difference frames."""
+"""Align stamps onto one sky grid, combine them per visit, render blink/difference frames.
+
+Besides the per-detector and per-channel groups, a colour composite group ("rgb") maps the six
+detectors onto three colours: blue = D1+D2 (0.75-1.6 um), green = D3+D4 (1.6-3.8 um),
+red = D5+D6 (3.8-5.0 um). Hot stars come out blue-white, cool stars orange, and very cold brown
+dwarfs (which glow mostly at 4-5 um) stand out red.
+"""
 import json
 
 import numpy as np
@@ -49,8 +55,8 @@ def align(stamp, out_wcs, shape):
     return img_r, var_r
 
 
-def coadd(images, variances):
-    """Inverse-variance weighted mean, NaN-aware."""
+def coadd(images, variances, return_weight=False):
+    """Inverse-variance weighted mean, NaN-aware (and the summed weight, if asked)."""
     num = np.zeros_like(images[0])
     den = np.zeros_like(images[0])
     for img, var in zip(images, variances):
@@ -59,7 +65,66 @@ def coadd(images, variances):
         num += np.where(ok, img, 0.0) * w
         den += w
     with np.errstate(invalid="ignore", divide="ignore"):
-        return np.where(den > 0, num / den, np.nan)
+        mean = np.where(den > 0, num / den, np.nan)
+    return (mean, den) if return_weight else mean
+
+
+# Colour composite: which detectors feed which colour, and the order colours are stored in.
+RGB_BANDS = {"r": (5, 6), "g": (3, 4), "b": (1, 2)}
+BAND_OF_DETECTOR = {d: band for band, dets in RGB_BANDS.items() for d in dets}
+BAND_ORDER = ("r", "g", "b")
+
+
+def _stretch(x, vmin, vmax, asinh_a=0.1):
+    x = np.clip((x - vmin) / (vmax - vmin), 0, 1)
+    return np.arcsinh(x / asinh_a) / np.arcsinh(1 / asinh_a)
+
+
+def to_rgb_png(bands, path, limits, diverging=False):
+    """Save a colour PNG from three images (r, g, b) plus a flag mask beside it.
+
+    `limits[band]` is (vmin, vmax) for a normal image, or dmax for a difference (grey = no
+    change; a tint shows which colours brightened or faded). A band with no data stays dark
+    (or grey, for a difference), so a visit missing a detector still renders.
+    """
+    shape = next(iter(bands.values())).shape
+    bad = np.ones(shape, dtype=bool)
+    planes = []
+    for band in BAND_ORDER:
+        data = bands.get(band)
+        if data is None or not np.isfinite(data).any():
+            planes.append(np.full(shape, 0.5 if diverging else 0.0))
+            continue
+        bad &= ~np.isfinite(data)
+        filled = fill_nans(data)
+        if diverging:
+            dmax = limits[band] or 1.0
+            planes.append(0.5 + 0.5 * np.clip(filled / dmax, -1, 1))
+        else:
+            planes.append(_stretch(filled, *limits[band]))
+    rgb = np.nan_to_num(np.stack(planes, axis=-1) * 255, nan=0).astype(np.uint8)
+    Image.fromarray(np.flipud(rgb), mode="RGB").save(path)
+    rgba = np.zeros(shape + (4,), dtype=np.uint8)
+    rgba[bad] = (*NAN_RGB, 200)
+    Image.fromarray(np.flipud(rgba), mode="RGBA").save(path.with_name("mask_" + path.name))
+
+
+def _limits(stacks):
+    """Display range shared by all visits of a group: (vmin, vmax) and a difference scale."""
+    finite = np.concatenate([s[np.isfinite(s)] for s in stacks.values()])
+    if finite.size == 0:
+        return None
+    vmin, vmax = (float(v) for v in np.percentile(finite, [5, 99.7]))
+    if vmax <= vmin:
+        vmax = vmin + 1e-6
+    # Typical size of a visit-to-visit change: the spread of each visit about the all-visit mean.
+    mean = np.nanmean(np.stack(list(stacks.values())), axis=0) if len(stacks) > 1 else None
+    if mean is not None:
+        dev = np.concatenate([(s - mean)[np.isfinite(s - mean)] for s in stacks.values()])
+        dmax = float(np.percentile(np.abs(dev), 99.5)) * 2 if dev.size else 0.0
+    else:
+        dmax = 0.0
+    return vmin, vmax, dmax or (vmax - vmin) * 0.1
 
 
 def fill_nans(data):
@@ -103,6 +168,8 @@ def _group_order(gid):
     """'all' first, then detectors 1-6, each followed by its wavelength channels."""
     if gid == "all":
         return (0, 0, -1)
+    if gid == "rgb":
+        return (0, 1, -1)
     det, _, ch = gid.partition(":")
     return (1, int(det), int(ch) if ch else -1)
 
@@ -116,6 +183,7 @@ def build_frames(view_dir, target, exposures, stamps, fov_deg, visits):
     """
     out_wcs, shape = grid_wcs(target.ra, target.dec, fov_deg)
     by_group = {}
+    by_band = {}  # (band "r"/"g"/"b", visit) -> aligned images, for the colour composite
     for exp in exposures:
         stamp = stamps.get(exp.key)
         if stamp is None:
@@ -131,9 +199,14 @@ def build_frames(view_dir, target, exposures, stamps, fov_deg, visits):
             g["vars"].append(var)
             g["wls"].append(wl)
             g["n"] += 1
+        band = by_band.setdefault((BAND_OF_DETECTOR[exp.detector], exp.visit), dict(imgs=[], vars=[], wls=[]))
+        band["imgs"].append(img)
+        band["vars"].append(var)
+        band["wls"].append(wl)
 
     view_dir.mkdir(parents=True, exist_ok=True)
     frames, diffs, channels = [], [], []
+    group_info = {}  # per group: file tag, visits, display range (used by combine.py)
     visit_info = {v["visit"]: v for v in visits}
     for gid in sorted({gid for gid, _ in by_group}, key=_group_order):
         groups = sorted((v, g) for (d, v), g in by_group.items() if d == gid)
@@ -146,14 +219,15 @@ def build_frames(view_dir, target, exposures, stamps, fov_deg, visits):
             channels.append(dict(group=gid, detector=det, channel=channel,
                                  wl_center=round(channel_centre(det, channel), 3),
                                  visits=[v for v, _ in groups]))
-        stacks = {v: coadd(g["imgs"], g["vars"]) for v, g in groups}
-        finite = np.concatenate([s[np.isfinite(s)] for s in stacks.values()])
-        if finite.size == 0:
+        combined = {v: coadd(g["imgs"], g["vars"], return_weight=True) for v, g in groups}
+        stacks = {v: c[0] for v, c in combined.items()}
+        lim = _limits(stacks)
+        if lim is None:
             continue
-        vmin, vmax = np.percentile(finite, [5, 99.7])
-        if vmax <= vmin:
-            vmax = vmin + 1e-6
+        vmin, vmax, dscale = lim
         tag = f"D{det}" + (f"c{channel}" if channel is not None else "")
+        group_info[gid] = dict(tag=tag, kind="mono", visits=[v for v, _ in groups],
+                               vmin=vmin, vmax=vmax, dmax=dscale)
         for v, g in groups:
             name = f"{tag}_v{v}.png"
             to_png(stacks[v], view_dir / name, vmin, vmax)
@@ -175,11 +249,20 @@ def build_frames(view_dir, target, exposures, stamps, fov_deg, visits):
                                   file=name, start=visit_info[v]["start"], end=visit_info[v]["end"]))
         np.savez_compressed(view_dir / f"stack_{tag}.npz",
                             **{f"v{v}": s.astype(np.float32) for v, s in stacks.items()})
+        # Summed inverse-variance weights, so visits can be added together properly later.
+        np.savez_compressed(view_dir / f"weight_{tag}.npz",
+                            **{f"v{v}": c[1].astype(np.float32) for v, c in combined.items()})
+
+    rgb = _build_rgb(view_dir, by_band, visit_info)
+    if rgb:
+        frames[:0] = rgb["frames"]
+        group_info["rgb"] = rgb["info"]
 
     manifest = dict(
         target=target.as_dict(), fov_deg=fov_deg, shape=list(shape),
         pixel_scale_arcsec=config.PIXEL_SCALE_ARCSEC, visits=visits,
-        frames=frames, diffs=diffs, channels=channels,
+        frames=frames, diffs=diffs, channels=channels, groups=group_info,
+        rgb_bands={b: list(d) for b, d in RGB_BANDS.items()},
         n_exposures_used=sum(1 for e in exposures if e.key in stamps),
         exposures=[dict(key=e.key, mjd=e.mjd, visit=e.visit, detector=e.detector,
                         collection=e.collection) for e in exposures if e.key in stamps],
@@ -187,3 +270,56 @@ def build_frames(view_dir, target, exposures, stamps, fov_deg, visits):
     )
     (view_dir / "manifest.json").write_text(json.dumps(manifest, indent=1))
     return manifest
+
+
+def _build_rgb(view_dir, by_band, visit_info):
+    """Colour composite per visit: red = D5+D6, green = D3+D4, blue = D1+D2.
+
+    Each colour has its own display range, shared across visits, so visits compare fairly and
+    a change of colour between visits is real. Returns frames + group info, or None.
+    """
+    visits = sorted({v for _, v in by_band})
+    stacks, weights, limits, wls = {}, {}, {}, {}
+    for band in BAND_ORDER:
+        per_visit = {}
+        for v in visits:
+            g = by_band.get((band, v))
+            if g:
+                mean, w = coadd(g["imgs"], g["vars"], return_weight=True)
+                per_visit[v] = mean
+                weights[(band, v)] = w
+                wls.setdefault(v, []).extend(g["wls"])
+        if not per_visit:
+            continue
+        lim = _limits(per_visit)
+        if lim is None:
+            continue
+        limits[band] = lim
+        for v, mean in per_visit.items():
+            stacks[(band, v)] = mean
+    if len(limits) < 2:  # a colour picture needs at least two colours
+        return None
+    frames = []
+    for v in visits:
+        bands = {b: stacks.get((b, v)) for b in BAND_ORDER}
+        if sum(x is not None for x in bands.values()) < 2:
+            continue
+        name = f"RGB_v{v}.png"
+        to_rgb_png(bands, view_dir / name, {b: limits[b][:2] for b in limits})
+        present = [b for b in BAND_ORDER if bands[b] is not None]
+        frames.append(dict(
+            group="rgb", detector="rgb", channel=None, visit=v, file=name,
+            n_exposures=sum(len(by_band[(b, v)]["imgs"]) for b in present),
+            wl_min=round(min(wls[v]), 3), wl_max=round(max(wls[v]), 3),
+            start=visit_info[v]["start"], end=visit_info[v]["end"],
+            bands=present,
+        ))
+    if not frames:
+        return None
+    np.savez_compressed(view_dir / "stack_RGB.npz",
+                        **{f"v{v}_{b}": s.astype(np.float32) for (b, v), s in stacks.items()})
+    np.savez_compressed(view_dir / "weight_RGB.npz",
+                        **{f"v{v}_{b}": w.astype(np.float32) for (b, v), w in weights.items()})
+    info = dict(tag="RGB", kind="rgb", visits=[f["visit"] for f in frames],
+                limits={b: dict(vmin=l[0], vmax=l[1], dmax=l[2]) for b, l in limits.items()})
+    return dict(frames=frames, info=info)

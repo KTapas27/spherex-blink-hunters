@@ -3,12 +3,16 @@ const $ = (sel) => document.querySelector(sel);
 
 const state = {
   key: null, manifest: null, mode: "blink", det: "all", matched: false, channel: null,
+  ref: "prev",      // Difference mode: "prev", "others", or a visit number (0-based) to subtract
+  combo: {},        // Add/subtract mode: visit -> 1 (add), -1 (subtract) or 0 (off)
+  framesToken: 0,
   frames: [], idx: 0, playing: true, timer: null, chart: null, lcChart: null, posChart: null, aladin: null,
   lastPoints: [],
 };
 
 // Frame group currently shown: "all", a detector ("3"), or a wavelength channel ("3:7").
 function currentGroup() {
+  if (state.det === "rgb") return "rgb";
   if (state.matched && state.det !== "all" && state.channel !== null) return `${state.det}:${state.channel}`;
   return String(state.det);
 }
@@ -24,6 +28,8 @@ function writeHash() {
     det: state.det, mode: state.mode, speed: $("#speed").value, zoom: $("#zoom").value,
   });
   if (state.matched && state.channel !== null) p.set("ch", state.channel);
+  if (state.mode === "diff") p.set("ref", state.ref);
+  if (state.mode === "combine") p.set("combo", comboString());
   if ($("#invert").checked) p.set("invert", "1");
   history.replaceState(null, "", "#" + p.toString());
 }
@@ -77,11 +83,14 @@ function showManifest(m) {
   m.frames.forEach((f) => { f.group = groupOf(f); });
   m.diffs.forEach((f) => { f.group = groupOf(f); });
   m.channels = m.channels || [];
-  const dets = ["all", 1, 2, 3, 4, 5, 6].filter((d) => m.frames.some((f) => f.group === String(d)));
+  const dets = ["all", "rgb", 1, 2, 3, 4, 5, 6].filter((d) => m.frames.some((f) => f.group === String(d)));
   if (!dets.map(String).includes(String(state.det))) state.det = "all";
   $("#dets").innerHTML = dets.map((d) => {
     const fr = m.frames.filter((f) => f.group === String(d));
     const lo = Math.min(...fr.map((f) => f.wl_min)), hi = Math.max(...fr.map((f) => f.wl_max));
+    if (d === "rgb") {
+      return `<button data-det="rgb" title="Colour composite: red = D5+D6 (3.8–5 µm), green = D3+D4 (1.6–3.8 µm), blue = D1+D2 (0.75–1.6 µm). Cold brown dwarfs look red.">Colour<small>R 5+6 · G 3+4 · B 1+2</small></button>`;
+    }
     const sub = d === "all" ? "0.75–5 µm" : `${lo.toFixed(2)}–${hi.toFixed(2)}`;
     return `<button data-det="${d}">${d === "all" ? "All" : "D" + d}<small>${sub}</small></button>`;
   }).join("");
@@ -93,40 +102,110 @@ function showManifest(m) {
   toggleGaia();
 }
 
-function selectFrames() {
+// Visits that have data in the current group (0-based), from the manifest.
+function groupVisits() {
+  const m = state.manifest, g = m.groups?.[currentGroup()];
+  if (g) return g.visits.slice().sort((a, b) => a - b);
+  return [...new Set(m.frames.filter((f) => f.group === currentGroup()).map((f) => f.visit))].sort((a, b) => a - b);
+}
+
+function comboString() {
+  if (!state.manifest) return Object.keys(state.combo).length ? Object.values(state.combo).map((c) => ({ 1: "+", "-1": "-" })[c] || "0").join("") : "";
+  return groupVisits().map((v) => ({ 1: "+", "-1": "-" })[state.combo[v] ?? 1] || "0").join("");
+}
+
+// Which (plus, minus) pairs make up the frames of the current Difference / Add-subtract view.
+function combineSpecs() {
+  const vs = groupVisits();
+  if (state.mode === "combine") {
+    const plus = vs.filter((v) => (state.combo[v] ?? 1) === 1), minus = vs.filter((v) => state.combo[v] === -1);
+    return plus.length ? [{ plus, minus, visit: plus[0] }] : [];
+  }
+  if (vs.length < 2) return [];
+  if (state.ref === "prev") return vs.slice(1).map((v, i) => ({ plus: [v], minus: [vs[i]], visit: v }));
+  if (state.ref === "others") return vs.map((v) => ({ plus: [v], minus: vs.filter((o) => o !== v), visit: v }));
+  const ref = +state.ref;
+  if (!vs.includes(ref)) { state.ref = "prev"; return combineSpecs(); }
+  return vs.filter((v) => v !== ref).map((v) => ({ plus: [v], minus: [ref], visit: v }));
+}
+
+function renderModeControls() {
+  const vs = groupVisits();
+  $("#refRow").hidden = state.mode !== "diff";
+  $("#comboRow").hidden = state.mode !== "combine";
+  const refOpts = [["prev", "the previous visit"], ...vs.map((v) => [String(v), `Visit ${v + 1}`]), ["others", "the mean of all other visits"]];
+  if (!refOpts.some(([k]) => k === String(state.ref))) state.ref = "prev";
+  $("#ref").innerHTML = refOpts.map(([k, t]) => `<option value="${k}"${k === String(state.ref) ? " selected" : ""}>${t}</option>`).join("");
+  const visitDate = (v) => state.manifest.visits.find((x) => x.visit === v)?.start ?? "";
+  $("#combo").innerHTML = vs.map((v) => {
+    const s = state.combo[v] ?? 1, cls = s === 1 ? "plus" : s === -1 ? "minus" : "off";
+    return `<button data-v="${v}" class="${cls}" title="${visitDate(v)}">${s === 1 ? "+" : s === -1 ? "−" : "·"} Visit ${v + 1}</button>`;
+  }).join("");
+}
+
+async function selectFrames() {
   const m = state.manifest;
   if (!m) return;
+  const token = ++state.framesToken; // a newer click wins over a slower earlier one
   renderChannelPicker();
-  const list = state.mode === "diff" ? m.diffs : m.frames;
+  renderModeControls();
   const group = currentGroup();
-  state.frames = list.filter((f) => f.group === group).sort((a, b) => a.visit - b.visit);
-  state.idx = 0;
   document.querySelectorAll("#dets button").forEach((b) => b.classList.toggle("on", b.dataset.det === String(state.det)));
   document.querySelectorAll("#mode button").forEach((b) => b.classList.toggle("on", b.dataset.mode === state.mode));
+  writeHash();
+
+  if (state.mode === "blink") {
+    state.frames = m.frames.filter((f) => f.group === group).sort((a, b) => a.visit - b.visit);
+  } else if (!m.groups) {
+    // View built before add/subtract existed: only "minus visit 1" frames are stored.
+    state.frames = state.mode === "diff" ? m.diffs.filter((f) => f.group === group).sort((a, b) => a.visit - b.visit) : [];
+    if (state.mode === "combine" || state.ref !== "0") {
+      $("#frameLabel").innerHTML = "This view was built by an older version: click <b>Load sky</b> again to rebuild it (no new downloads) and enable this.";
+    }
+  } else {
+    const specs = combineSpecs();
+    $("#frameLabel").innerHTML = specs.length ? `<span class="muted">Combining visits…</span>` : "";
+    try {
+      const made = await Promise.all(specs.map((sp) =>
+        api(`/api/views/${m.key}/combine?group=${encodeURIComponent(group)}&plus=${sp.plus.join(",")}&minus=${sp.minus.join(",")}`)
+          .then((r) => ({ ...r, visit: sp.visit, detector: group === "all" || group === "rgb" ? group : +group.split(":")[0],
+                          channel: group.includes(":") ? +group.split(":")[1] : null }))));
+      if (token !== state.framesToken) return;
+      state.frames = made;
+    } catch (err) {
+      if (token !== state.framesToken) return;
+      state.frames = [];
+      $("#frameLabel").innerHTML = "Error: " + err.message;
+      return;
+    }
+  }
+  state.idx = 0;
   $("#timeline").innerHTML = state.frames.map((f, i) =>
-    `<button data-i="${i}">Visit ${f.visit + 1} · ${f.start}</button>`).join("");
+    `<button data-i="${i}">${f.label ?? `Visit ${f.visit + 1}`} · ${f.start}</button>`).join("");
   if (!state.frames.length) {
-    $("#frameLabel").innerHTML = state.mode === "diff"
-      ? "Only one visit here, so there is nothing to difference yet" : "No frames for this detector";
+    if (!$("#frameLabel").innerHTML) {
+      $("#frameLabel").innerHTML = state.mode === "combine" ? "Mark at least one visit with + to add it"
+        : state.mode === "diff" ? "Only one visit here, so there is nothing to difference yet" : "No frames for this detector";
+    }
+    $("#frame").hidden = true;
     return;
   }
   // Preload so blinking never flickers.
   state.frames.forEach((f) => { new Image().src = frameUrl(f); new Image().src = frameUrl(f, true); });
   showFrame();
   restartTimer();
-  writeHash();
 }
 
 function renderChannelPicker() {
   const m = state.manifest;
   const sel = $("#channel");
   const chans = m.channels.filter((c) => String(c.detector) === String(state.det));
-  const usable = state.det !== "all" && chans.length > 0;
+  const usable = state.det !== "all" && state.det !== "rgb" && chans.length > 0;
   sel.disabled = !usable || !state.matched;
   $("#matched").disabled = !usable;
   if (!usable) {
-    sel.innerHTML = `<option>${state.det === "all" ? "Pick a detector (D1–D6) first" : "No channel seen in 2+ visits; try more exposures"}</option>`;
-    if (state.det === "all" || !chans.length) state.matched = false;
+    sel.innerHTML = `<option>${state.det === "all" || state.det === "rgb" ? "Pick a detector (D1–D6) first" : "No channel seen in 2+ visits; try more exposures"}</option>`;
+    if (state.det === "all" || state.det === "rgb" || !chans.length) state.matched = false;
     $("#matched").checked = state.matched;
     return;
   }
@@ -158,11 +237,10 @@ function showFrame() {
   $("#frame").classList.toggle("invert", $("#invert").checked);
   $("#crosshair").hidden = !$("#cross").checked;
   drawGaia();
-  const det = f.detector === "all" ? "All detectors"
+  const det = f.detector === "rgb" ? "Colour: R = D5+D6, G = D3+D4, B = D1+D2"
+    : f.detector === "all" ? "All detectors"
     : `D${f.detector}${f.channel !== null && f.channel !== undefined ? ` channel ${f.channel + 1}/17` : ""}`;
-  const head = state.mode === "diff"
-    ? `Visit ${f.visit + 1} − Visit ${f.ref_visit + 1}`
-    : `Visit ${f.visit + 1}`;
+  const head = f.label ?? (f.ref_visit !== undefined ? `Visit ${f.visit + 1} − Visit ${f.ref_visit + 1}` : `Visit ${f.visit + 1}`);
   const wl = f.wl_min !== undefined ? ` · ${f.wl_min.toFixed(2)}–${f.wl_max.toFixed(2)} µm · ${f.n_exposures} exp` : "";
   $("#frameLabel").innerHTML = `${head} <span class="muted">${f.start} → ${f.end} · ${det}${wl}</span>`;
   document.querySelectorAll("#timeline button").forEach((b) => b.classList.toggle("on", +b.dataset.i === state.idx));
@@ -245,7 +323,7 @@ const mjdToDate = (mjd) => new Date((mjd - 40587) * 86400000);
 function drawLightCurve() {
   const pts = state.lastPoints || [];
   let sel = pts, what = "all detectors (colours differ by wavelength)";
-  if (state.det !== "all") {
+  if (state.det !== "all" && state.det !== "rgb") {
     sel = pts.filter((p) => String(p.detector) === String(state.det));
     what = `D${state.det}`;
     if (state.matched && state.channel !== null) {
@@ -518,6 +596,14 @@ async function init() {
   $("#search").onsubmit = (e) => { e.preventDefault(); loadView(); };
   $("#mode").onclick = (e) => { const b = e.target.closest("button"); if (b) { state.mode = b.dataset.mode; selectFrames(); } };
   $("#dets").onclick = (e) => { const b = e.target.closest("button"); if (b) { state.det = b.dataset.det; state.channel = null; selectFrames(); drawLightCurve(); } };
+  $("#ref").onchange = () => { state.ref = $("#ref").value; selectFrames(); };
+  $("#combo").onclick = (e) => {
+    const b = e.target.closest("button");
+    if (!b) return;
+    const v = +b.dataset.v, next = { 1: -1, "-1": 0, 0: 1 };
+    state.combo[v] = next[state.combo[v] ?? 1];
+    selectFrames();
+  };
   $("#matched").onchange = () => { state.matched = $("#matched").checked; selectFrames(); drawLightCurve(); };
   $("#channel").onchange = () => { state.channel = +$("#channel").value; selectFrames(); drawLightCurve(); };
   $("#timeline").onclick = (e) => { const b = e.target.closest("button"); if (b) { state.idx = +b.dataset.i; state.playing = false; restartTimer(); showFrame(); } };
@@ -552,6 +638,8 @@ function applyHash() {
   if (h.invert) $("#invert").checked = true;
   if (h.det) state.det = h.det;
   if (h.mode) state.mode = h.mode;
+  if (h.ref) state.ref = h.ref;
+  if (h.combo) [...h.combo].forEach((c, v) => { state.combo[v] = c === "+" ? 1 : c === "-" ? -1 : 0; });
   if (h.ch !== undefined) { state.matched = true; state.channel = +h.ch; }
   if (h.ra && h.dec && !h.q) h.q = `${h.ra} ${h.dec}`;
   if (h.q) { $("#q").value = h.q; loadView(); }
