@@ -1,0 +1,17 @@
+# Files NOT uploaded by `gcloud run deploy --source .`
+# Without this file gcloud would use .gitignore, which excludes cache/, and the
+# pre-built demo targets would be missing from the deployed app.
+.gcloudignore
+.git
+.gitignore
+.venv
+.claude
+**/__pycache__
+**/*.pyc
+.DS_Store
+docs/
+explore/
+notebooks/
+tutorials/
+*.fits
+*.log

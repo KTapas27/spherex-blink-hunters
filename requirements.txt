@@ -3,6 +3,7 @@ astropy
 astroquery
 pyvo
 reproject
+scipy
 photutils
 fsspec
 s3fs

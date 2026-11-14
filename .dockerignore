@@ -1,0 +1,13 @@
+# Only backend/, frontend/, scripts/, cache/ and requirements.txt go into the image.
+.git
+.venv
+.claude
+**/__pycache__
+**/*.pyc
+.DS_Store
+docs
+explore
+notebooks
+tutorials
+*.fits
+*.log
