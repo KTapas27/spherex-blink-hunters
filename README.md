@@ -2,6 +2,9 @@
 
 **NASA Space Apps 2026 · Challenge: "Planet X and SPHEREx"**
 
+**▶ Live app: <https://blink-hunters-8kxg.onrender.com>** (free hosting: the first visit after a quiet spell
+can take ~30 s to wake up)
+
 A public web tool that turns NASA SPHEREx all-sky infrared images (0.75–5 µm) into a
 looping "sky video" for any patch of sky, so anyone can spot moving brown dwarfs, nearby
 stars, asteroids and variable stars.

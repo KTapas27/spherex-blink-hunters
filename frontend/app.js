@@ -270,9 +270,7 @@ function renderInfo(m) {
     <div>Proper motion ${pm.toFixed(2)}″/yr${t.parallax ? ` · parallax ${t.parallax.toFixed(1)} mas` : ""}</div>
     <div>Moved ${t.moved_arcsec.toFixed(1)}″ since J2000 (${(t.moved_arcsec / m.pixel_scale_arcsec).toFixed(1)} SPHEREx pixels)</div>
     <table>${visits}</table>
-    <div style="margin-top:6px">Using ${m.n_exposures_used} of ${m.n_available} exposures · ${m.collections.join(", ")}${m.elapsed_s ? ` · built in ${m.elapsed_s}s` : ""}</div>
-    <button id="copyLink">Copy shareable link</button>`;
-  $("#copyLink").onclick = () => navigator.clipboard.writeText(location.href);
+    <div style="margin-top:6px">Using ${m.n_exposures_used} of ${m.n_available} exposures · ${m.collections.join(", ")}${m.elapsed_s ? ` · built in ${m.elapsed_s}s` : ""}</div>`;
 }
 
 // ---------- click -> sky position -> spectrum ----------
@@ -314,8 +312,13 @@ async function onImageClick(ev) {
   }
 }
 
-const VISIT_COLORS = ["#4dabf7", "#ff9f43", "#51cf66", "#f06595", "#ffd43b"];
-const DET_COLORS = { 1: "#748ffc", 2: "#4dabf7", 3: "#38d9a9", 4: "#a9e34b", 5: "#ffa94d", 6: "#ff6b6b" };
+// Space theme: visits in purple / blue / red first; detectors run blue (short λ) → purple → red (long λ).
+const VISIT_COLORS = ["#a78bfa", "#60a5fa", "#ff4d6d", "#f0abfc", "#22d3ee"];
+const DET_COLORS = { 1: "#38bdf8", 2: "#818cf8", 3: "#a78bfa", 4: "#e879f9", 5: "#fda4af", 6: "#ef4444" };
+if (window.Chart) {
+  Chart.defaults.font.family = "Inter, system-ui, sans-serif";
+  Chart.defaults.color = "#9a94b4";
+}
 const mjdToDate = (mjd) => new Date((mjd - 40587) * 86400000);
 
 // Brightness vs time at the clicked position. Shows one detector (or one wavelength channel when
@@ -350,12 +353,12 @@ function drawLightCurve() {
     options: {
       animation: false,
       scales: {
-        x: { ticks: { color: "#8a97ad", callback: (v) => new Date(v).toISOString().slice(0, 7), maxTicksLimit: 6 },
-             grid: { color: "#243046" } },
-        y: { title: { display: true, text: "Flux (mJy)", color: "#8a97ad" }, ticks: { color: "#8a97ad" }, grid: { color: "#243046" } },
+        x: { ticks: { color: "#9a94b4", callback: (v) => new Date(v).toISOString().slice(0, 7), maxTicksLimit: 6 },
+             grid: { color: "rgba(167, 139, 250, 0.12)" } },
+        y: { title: { display: true, text: "Flux (mJy)", color: "#9a94b4" }, ticks: { color: "#9a94b4" }, grid: { color: "rgba(167, 139, 250, 0.12)" } },
       },
       plugins: {
-        legend: { labels: { color: "#e6ebf5" } },
+        legend: { labels: { color: "#ece8ff" } },
         tooltip: { callbacks: { label: (c) => `${new Date(c.raw.x).toISOString().slice(0, 10)} · ${c.raw.wl.toFixed(3)} µm · ${c.raw.y.toFixed(1)} mJy` } },
       },
     },
@@ -390,12 +393,12 @@ function drawPositions(allPoints) {
     options: {
       animation: false,
       scales: {
-        x: { ticks: { color: "#8a97ad", callback: (v) => new Date(v).toISOString().slice(0, 7), maxTicksLimit: 6 },
-             grid: { color: "#243046" } },
-        y: { title: { display: true, text: "East offset (″)", color: "#8a97ad" }, ticks: { color: "#8a97ad" }, grid: { color: "#243046" } },
+        x: { ticks: { color: "#9a94b4", callback: (v) => new Date(v).toISOString().slice(0, 7), maxTicksLimit: 6 },
+             grid: { color: "rgba(167, 139, 250, 0.12)" } },
+        y: { title: { display: true, text: "East offset (″)", color: "#9a94b4" }, ticks: { color: "#9a94b4" }, grid: { color: "rgba(167, 139, 250, 0.12)" } },
       },
       plugins: {
-        legend: { labels: { color: "#e6ebf5" } },
+        legend: { labels: { color: "#ece8ff" } },
         tooltip: { callbacks: { label: (c) => `${c.dataset.label} ${new Date(c.raw.x).toISOString().slice(0, 10)} · E ${c.raw.y.toFixed(1)}″, N ${c.raw.n.toFixed(1)}″` } },
       },
     },
@@ -435,10 +438,10 @@ function drawSpectrum(points, nFlagged = 0) {
     options: {
       animation: false,
       scales: {
-        x: { title: { display: true, text: "Wavelength (µm)", color: "#8a97ad" }, ticks: { color: "#8a97ad" }, grid: { color: "#243046" } },
-        y: { title: { display: true, text: "Flux (mJy)", color: "#8a97ad" }, ticks: { color: "#8a97ad" }, grid: { color: "#243046" } },
+        x: { title: { display: true, text: "Wavelength (µm)", color: "#9a94b4" }, ticks: { color: "#9a94b4" }, grid: { color: "rgba(167, 139, 250, 0.12)" } },
+        y: { title: { display: true, text: "Flux (mJy)", color: "#9a94b4" }, ticks: { color: "#9a94b4" }, grid: { color: "rgba(167, 139, 250, 0.12)" } },
       },
-      plugins: { legend: { labels: { color: "#e6ebf5" } } },
+      plugins: { legend: { labels: { color: "#ece8ff" } } },
     },
   });
 }
@@ -560,7 +563,7 @@ async function updateAladin(m) {
     if (!state.aladin) {
       state.aladin = A.aladin("#aladin", {
         fov: m.fov_deg * 2, target: `${ra} ${dec}`,
-        showReticle: true, showCooGridControl: false, showProjectionControl: false, showFullscreenControl: true,
+        showReticle: true, reticleColor: "#ff4d6d", showCooGridControl: false, showProjectionControl: false, showFullscreenControl: true,
       });
       state.aladin.setBaseImageLayer(A.imageHiPS(hips.url, { name: hips.name, imgFormat: "jpeg" }));
     } else {
@@ -575,7 +578,7 @@ async function updateAladin(m) {
   // Gaia stars come from our own backend (IRSA/MAST), not CDS VizieR, which is often down.
   loadGaia(m).then((sources) => {
     if (!sources.length || state.manifest?.key !== m.key || !state.aladin) return;
-    const cat = A.catalog({ name: `${(sources[0]?.release || "Gaia DR3").split(" (")[0]} (epoch 2026.0)`, sourceSize: 10, color: "#ffd43b", onClick: "showTable" });
+    const cat = A.catalog({ name: `${(sources[0]?.release || "Gaia DR3").split(" (")[0]} (epoch 2026.0)`, sourceSize: 8, shape: "circle", color: "#60a5fa", onClick: "showTable" });
     cat.addSources(sources.map((s) => {
       const { ra: sra, dec: sdec } = pixelToSky(s.x + 1, s.y + 1);
       return A.source(sra, sdec, { G: s.g, pm_mas_yr: s.pm, gaia_id: s.id });

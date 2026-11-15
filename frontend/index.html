@@ -6,6 +6,10 @@
   <title>Blink Hunters</title>
   <meta name="description" content="Blink SPHEREx infrared sky images over time to spot moving and changing objects.">
   <meta name="ai-assistance" content="Code written with an AI coding assistant (Claude) at the team's direction; see README.md">
+  <meta name="theme-color" content="#020106">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap">
   <link rel="stylesheet" href="style.css">
   <script type="module">
     // Aladin Lite ships as an ES module; expose it as window.A for app.js.
@@ -18,9 +22,21 @@
 </head>
 <body>
   <aside id="panel">
-    <header>
-      <h1>Blink Hunters</h1>
-      <p class="sub">SPHEREx sky time-lapse · 0.75–5 µm</p>
+    <header class="brand">
+      <svg class="logo" viewBox="0 0 40 40" aria-hidden="true">
+        <defs>
+          <linearGradient id="lg" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#fcd34d"/><stop offset=".55" stop-color="#f97316"/><stop offset="1" stop-color="#a78bfa"/>
+          </linearGradient>
+        </defs>
+        <ellipse cx="20" cy="20" rx="17" ry="7" fill="none" stroke="url(#lg)" stroke-width="2" transform="rotate(-25 20 20)"/>
+        <circle cx="20" cy="20" r="6.5" fill="url(#lg)"/>
+        <circle cx="34" cy="12" r="2" fill="#ff4d6d"/>
+      </svg>
+      <div>
+        <h1>Blink Hunters</h1>
+        <p class="sub">SPHEREx sky time-lapse · 0.75–5 µm</p>
+      </div>
     </header>
 
     <form id="search">
@@ -116,6 +132,10 @@
         <p class="hint" id="hint">Tip: click any object in the image to build its spectrum from every exposure.</p>
       </div>
       <div id="timeline"></div>
+      <div class="card" id="contextCard">
+        <h2>Sky context <span class="muted" id="aladinNote">Aladin · Gaia DR3</span></h2>
+        <div id="aladin"></div>
+      </div>
     </section>
 
     <section id="side">
@@ -139,10 +159,6 @@
         <canvas id="pos" height="200" hidden></canvas>
         <p class="muted small">East–west offset of the light centre (″, + = east) per detector. If short and long
           wavelengths disagree, two objects may be blended in one 6″ pixel.</p>
-      </div>
-      <div class="card">
-        <h2>Context <span class="muted" id="aladinNote">Aladin · Gaia DR3</span></h2>
-        <div id="aladin"></div>
       </div>
     </section>
   </main>
