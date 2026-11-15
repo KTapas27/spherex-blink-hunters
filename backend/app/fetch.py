@@ -71,12 +71,59 @@ def stamp_path(exp, ra, dec, half):
     return config.STAMP_DIR / f"{exp.key}_{ra:.5f}_{dec:.5f}_{half}.npz"
 
 
+def _load(path):
+    with np.load(path) as data:
+        return {k: data[k] for k in data.files} or None
+
+
+def _crop(stamp, coord, half):
+    """Cut a smaller stamp out of a larger cached one (same centre and edge handling as a download)."""
+    if stamp is None:
+        return None  # the larger stamp was off the detector, so this one is too
+    wcs = WCS(fits.Header.fromstring(str(stamp["header"])))
+    x, y = (float(v) for v in wcs.world_to_pixel(coord))
+    ny, nx = stamp["image"].shape
+    xi, yi = int(round(x)), int(round(y))
+    y0, y1 = max(yi - half, 0), min(yi + half + 1, ny)
+    x0, x1 = max(xi - half, 0), min(xi + half + 1, nx)
+    if y1 - y0 < 3 or x1 - x0 < 3:
+        return None
+    out = {k: v[y0:y1, x0:x1] for k, v in stamp.items() if k != "header"}
+    out["header"] = np.array(wcs[y0:y1, x0:x1].to_header(relax=True).tostring())
+    return out
+
+
+def _larger_cached(exp, ra, dec, half):
+    """Path of the smallest cached stamp of this exposure and position that is bigger than `half`."""
+    best = None
+    for path in config.STAMP_DIR.glob(f"{exp.key}_{ra:.5f}_{dec:.5f}_*.npz"):
+        try:
+            h = int(path.stem.rsplit("_", 1)[1])
+        except ValueError:
+            continue
+        if h > half and (best is None or h < best[0]):
+            best = (h, path)
+    return best[1] if best else None
+
+
 def get_stamp(exp, ra, dec, half):
-    """Return the cached stamp dict for one exposure, downloading it if needed."""
+    """Return the cached stamp dict for one exposure, downloading it if needed.
+
+    A smaller field of view is cut from a larger stamp already on disk, so switching from
+    6' to 3' needs no archive access at all.
+    """
     path = stamp_path(exp, ra, dec, half)
     if path.exists():
-        with np.load(path) as data:
-            return {k: data[k] for k in data.files} or None
+        return _load(path)
+    bigger = _larger_cached(exp, ra, dec, half)
+    if bigger is not None:
+        try:
+            stamp = _crop(_load(bigger), SkyCoord(ra, dec, unit="deg"), half)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            np.savez_compressed(path, **(stamp or {}))
+            return stamp
+        except Exception as err:  # a damaged cache file: fall through to a fresh download
+            log.warning("could not reuse %s: %s", bigger.name, err)
     coord = SkyCoord(ra, dec, unit="deg")
     routes = ([_fetch_s3] if exp.s3_path else []) + [_fetch_cutout]
     last_err = None

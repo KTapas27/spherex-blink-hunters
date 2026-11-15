@@ -47,30 +47,25 @@ Analysis notebook (reproduces every result on the five targets; a pre-run HTML c
 .venv/bin/jupyter lab notebooks/blink_hunters_walkthrough.ipynb
 ```
 
-## Deploy to Google Cloud Run
+## Deploy to Google Cloud Run (public link)
 
-The `Dockerfile` builds a self-contained image (Python 3.12, FastAPI, the UI, and anything in
-`cache/`). `deploy/cloudrun.sh` builds it remotely with Cloud Build, so no local Docker is needed.
-The default region is `us-east1`, next to the SPHEREx S3 bucket.
-
-Easiest route: [Google Cloud Shell](https://shell.cloud.google.com), where `gcloud` is already installed and signed in.
+One command in [Google Cloud Shell](https://shell.cloud.google.com), where `gcloud` is installed and signed in:
 
 ```bash
-git clone https://github.com/KTapas27/spherex-blink-hunters && cd spherex-blink-hunters
-gcloud config set project YOUR_PROJECT_ID       # a project with billing enabled
-MIN_INSTANCES=1 deploy/cloudrun.sh              # prints the public URL
-deploy/warmup.sh https://YOUR-SERVICE-URL       # builds the 5 demo targets on the server
+git clone https://github.com/KTapas27/spherex-blink-hunters && cd spherex-blink-hunters   # or upload + unzip
+bash deploy/cloudshell_deploy.sh YOUR_PROJECT_ID     # a project with billing enabled
 ```
 
-- **With a pre-built cache:** run `scripts/precache.py --per-group 0` first. `cache/` is then baked into the
-  image, and the demo targets work instantly even after the service scales to zero.
-- **Without one** (e.g. fresh clone in Cloud Shell): `warmup.sh` builds the targets on the server. They live on
-  the instance's in-memory disk, so keep `MIN_INSTANCES=1` while judges may visit.
-- One instance only (`--max-instances 1`): job progress is kept in memory. CPU is always on
-  (`--no-cpu-throttling`), so builds keep running between status polls.
-- Cost: with `MIN_INSTANCES=1`, roughly $3–4/day for 2 vCPU + 2 GiB (less with the free tier or Space Apps Google Cloud credits). Afterwards, set it back to 0
-  (`gcloud run services update blink-hunters --region us-east1 --min-instances 0`) or delete the service.
-- Local test: `docker build -t blink-hunters . && docker run -p 8080:8080 blink-hunters` → <http://localhost:8080>.
+It builds the five demo targets into `cache/` (same views as a local run, with the Gaia overlay), bakes
+them into the Docker image, deploys to Cloud Run in `us-east1` (next to the SPHEREx S3 bucket), checks
+each target on the live site, and prints the public URL. Re-running is safe; finished targets are reused.
+
+- `SKIP_CACHE=1 bash deploy/cloudshell_deploy.sh ID`: deploy whatever is in `cache/` (e.g. copied from your PC).
+- `MIN_INSTANCES=1 ...`: keep one instance warm while judges visit (about $3–4/day; no cold start).
+  Afterwards: `gcloud run services update blink-hunters --region us-east1 --min-instances 0`.
+- One instance only (`--max-instances 1`; build progress lives in memory), CPU always on so builds of
+  new targets keep running between status polls. New targets work live and are cached until a restart.
+- Local Docker test: `docker build -t blink-hunters . && docker run -p 8080:8080 blink-hunters`.
 
 ## How it works
 

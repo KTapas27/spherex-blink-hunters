@@ -1,4 +1,6 @@
 """Turn user input (a name or coordinates) into a sky position at the SPHEREx epoch."""
+from __future__ import annotations  # allows `X | None` type hints on Python 3.9
+
 import json
 import re
 import urllib.parse

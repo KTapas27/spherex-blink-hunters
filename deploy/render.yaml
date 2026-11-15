@@ -1,0 +1,8 @@
+# Render Blueprint: one free Docker web service. Copied to the repo root by deploy/github_publish.sh.
+services:
+  - type: web
+    name: blink-hunters
+    runtime: docker
+    plan: free
+    healthCheckPath: /api/health
+    autoDeploy: true

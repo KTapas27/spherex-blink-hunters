@@ -25,7 +25,7 @@ DETECTOR_BANDS = {
 CHANNELS_PER_DETECTOR = 17
 
 # Bump when the frame/manifest format changes so cached views are rebuilt (stamps are reused).
-VIEW_VERSION = 2
+VIEW_VERSION = 3  # 3: colour composite + per-visit weights for add/subtract
 
 # Exposures closer together than this belong to the same "visit" of the sky.
 VISIT_GAP_DAYS = 30
@@ -54,4 +54,10 @@ ROOT = Path(__file__).resolve().parents[2]
 CACHE_DIR = Path(os.environ.get("BLINK_CACHE_DIR", ROOT / "cache"))
 STAMP_DIR = CACHE_DIR / "stamps"
 VIEW_DIR = CACHE_DIR / "views"
+SIA_DIR = CACHE_DIR / "sia"  # exposure lists per position, so a new field of view needs no new search
+
+# Exposure-list cache: re-search IRSA after this many hours (new SPHEREx data arrives weekly);
+# if IRSA is down, an older list is used instead of failing.
+SIA_CACHE_HOURS = 12
+SIA_RETRIES = 4  # attempts per search; waits 2, 5, 10 s between them
 FRONTEND_DIR = ROOT / "frontend"

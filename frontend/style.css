@@ -113,3 +113,14 @@ main { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 16px; pa
   #panel { border-right: none; border-bottom: 1px solid var(--line); }
   main { padding: 12px 16px; }
 }
+
+.warn { margin: 6px 0; padding: 6px 8px; border-radius: 6px; font-size: 12px; line-height: 1.4;
+        color: #ffd8a8; background: rgba(255, 146, 43, 0.12); border: 1px solid rgba(255, 146, 43, 0.35); }
+
+.subctl { margin: 6px 0 2px; }
+.subctl select { margin-left: 6px; }
+.seg.combo button { flex: 0 0 auto; min-width: 74px; }
+.seg.combo button.plus { background: rgba(81, 207, 102, .18); border-color: #51cf66; color: #d3f9d8; }
+.seg.combo button.minus { background: rgba(255, 107, 107, .18); border-color: #ff6b6b; color: #ffe3e3; }
+.seg.combo button.off { opacity: .55; }
+.seg.dets button[data-det="rgb"] { background-image: linear-gradient(90deg, rgba(77,171,247,.25), rgba(81,207,102,.25), rgba(255,107,107,.25)); }

@@ -58,6 +58,18 @@
       <div class="seg" id="mode" role="tablist">
         <button data-mode="blink" class="on">Blink</button>
         <button data-mode="diff">Difference</button>
+        <button data-mode="combine">Add / subtract</button>
+      </div>
+      <div id="refRow" class="subctl" hidden>
+        <label class="inline">Compared with
+          <select id="ref"></select>
+        </label>
+        <p class="muted small">Each frame shows what changed: bright = brighter (or arrived), dark = fainter (or left).</p>
+      </div>
+      <div id="comboRow" class="subctl" hidden>
+        <div class="seg combo" id="combo"></div>
+        <p class="muted small">Tap a visit to cycle <b>+</b> add, <b>−</b> subtract, off. Only <b>+</b>: a deep stack
+          for faint objects. <b>+</b> and <b>−</b>: what differs between the two sets.</p>
       </div>
       <div class="seg dets" id="dets"></div>
       <div class="matched">
@@ -110,6 +122,7 @@
       <div class="card">
         <h2>Spectrum <span id="specWhere" class="muted"></span></h2>
         <div id="specEmpty" class="muted">Click an object in the image.</div>
+        <p id="specWarn" class="warn" hidden></p>
         <canvas id="spec" height="220" hidden></canvas>
       </div>
       <div class="card">
@@ -122,12 +135,13 @@
       <div class="card">
         <h2>Position over time <span id="posWhere" class="muted"></span></h2>
         <div id="posEmpty" class="muted">Click an object: a mover drifts between visits, a fixed star doesn't.</div>
+        <p id="posWarn" class="warn" hidden></p>
         <canvas id="pos" height="200" hidden></canvas>
         <p class="muted small">East–west offset of the light centre (″, + = east) per detector. If short and long
           wavelengths disagree, two objects may be blended in one 6″ pixel.</p>
       </div>
       <div class="card">
-        <h2>Context <span class="muted">Aladin · Gaia DR3</span></h2>
+        <h2>Context <span class="muted" id="aladinNote">Aladin · Gaia DR3</span></h2>
         <div id="aladin"></div>
       </div>
     </section>
