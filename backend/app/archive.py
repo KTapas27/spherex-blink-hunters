@@ -102,6 +102,13 @@ def find_exposures(ra, dec):
             exposures = _parse(_search_irsa(ra, dec))
         except Exception as err:
             if not saved:
+                offline = exposures_from_stamps(ra, dec)
+                if offline:
+                    log.warning("IRSA unavailable (%s); using %d exposures already downloaded for this position",
+                                err, len(offline))
+                    exposures = sorted(offline, key=lambda e: e.mjd)
+                    assign_visits(exposures)
+                    return exposures
                 raise ArchiveUnavailable(
                     "The NASA/IPAC archive (IRSA) is not answering right now "
                     f"({_short(err)}). This is on IRSA's side; please try again in a few minutes.") from err
@@ -120,6 +127,52 @@ def find_exposures(ra, dec):
     exposures = sorted(exposures, key=lambda e: e.mjd)
     assign_visits(exposures)
     return exposures
+
+
+def exposures_from_stamps(ra, dec):
+    """Rebuild the exposure list from stamps already on disk for this position (no network).
+
+    Last resort when IRSA's search is down and no exposure list was saved: every downloaded stamp
+    carries its exposure id, detector and FITS header (with the observation time), which is all the
+    pipeline needs, since the pixels themselves are already here. Empty (off-detector) stamps are
+    skipped. Returns [] if nothing was downloaded for this position.
+    """
+    from astropy.io import fits
+
+    suffix = f"_{ra:.5f}_{dec:.5f}_"
+    collection_of = _collections_from_manifests()
+    found = {}
+    for path in config.STAMP_DIR.glob(f"*{suffix}*.npz"):
+        key = path.name.split(suffix)[0]  # e.g. 2025W19_1B_0116_1_D3
+        obs_id, _, det = key.rpartition("_D")
+        if key in found or not det.isdigit():
+            continue
+        try:
+            with np.load(path) as data:
+                if "header" not in data.files:
+                    continue
+                header = fits.Header.fromstring(str(data["header"]))
+            mjd = float(header["MJD-AVG"] if "MJD-AVG" in header else header["MJD-OBS"])
+        except Exception as err:  # unreadable cache file: skip it
+            log.warning("skipping stamp %s: %s", path.name, err)
+            continue
+        lo, hi = config.DETECTOR_BANDS.get(int(det), (np.nan, np.nan))
+        found[key] = Exposure(obs_id=obs_id, detector=int(det),
+                              collection=collection_of.get(key, config.COLLECTIONS[0]), mjd=mjd,
+                              wl_min=lo, wl_max=hi, access_url="", s3_path=None)
+    return list(found.values())
+
+
+def _collections_from_manifests():
+    """Which release each exposure came from, as recorded in built views (for the offline list)."""
+    out = {}
+    for manifest in config.VIEW_DIR.glob("*/manifest.json"):
+        try:
+            for e in json.loads(manifest.read_text()).get("exposures", []):
+                out[e["key"]] = e.get("collection", config.COLLECTIONS[0])
+        except (ValueError, OSError):
+            continue
+    return out
 
 
 def _short(err):

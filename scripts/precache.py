@@ -55,4 +55,7 @@ for q in queries:
 if failed:
     print("FAILED: " + ", ".join(failed))
 # Exit at once: background Gaia threads stuck on a slow catalogue service must not keep us alive.
+# os._exit skips the normal flush, so flush first or piped output (e.g. into a log) is lost.
+sys.stdout.flush()
+sys.stderr.flush()
 os._exit(1 if failed else 0)
