@@ -7,6 +7,9 @@
   <meta name="description" content="Blink SPHEREx infrared sky images over time to spot moving and changing objects.">
   <meta name="ai-assistance" content="Code written with an AI coding assistant (Claude) at the team's direction; see README.md">
   <meta name="theme-color" content="#020106">
+  <meta property="og:title" content="Blink Hunters: SPHEREx sky time-lapse">
+  <meta property="og:description" content="Blink NASA SPHEREx infrared images of any patch of sky to spot moving and changing objects, and click any star for its spectrum.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Cellipse cx='20' cy='20' rx='17' ry='7' fill='none' stroke='%23f97316' stroke-width='3' transform='rotate(-25 20 20)'/%3E%3Ccircle cx='20' cy='20' r='7' fill='%23fbbf24'/%3E%3Ccircle cx='34' cy='12' r='2.5' fill='%23ff4d6d'/%3E%3C/svg%3E">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap">
@@ -38,6 +41,10 @@
         <p class="sub">SPHEREx sky time-lapse · 0.75–5 µm</p>
       </div>
     </header>
+
+    <p class="intro">NASA's SPHEREx photographs the whole sky every six months. Blink its pictures of any patch of
+      sky to catch stars, brown dwarfs and asteroids moving, or stars changing brightness, then click any object
+      for its infrared spectrum.</p>
 
     <form id="search">
       <label for="q">Object name or RA Dec</label>
@@ -109,6 +116,29 @@
     </section>
 
     <section id="info" hidden></section>
+
+    <details id="about">
+      <summary>How to use · data &amp; credits</summary>
+      <ol>
+        <li>Type a name (<i>Barnard's Star</i>) or coordinates (<i>08h55m10.8s -07d14m42s</i> or <i>133.79 -7.24</i>),
+          or tap a test target.</li>
+        <li><b>Blink</b> plays the visits in turn: anything that jumps between frames moved. <b>Difference</b>
+          subtracts visits, so a mover shows as a dark/bright pair. <b>Add / subtract</b> stacks visits for faint objects.</li>
+        <li>Pick a detector (D1 = 0.75 µm … D6 = 5 µm), or <b>Colour</b>: cold brown dwarfs look red.</li>
+        <li>Click any object for its spectrum, brightness over time and position over time. Changes are
+          <i>candidates</i> until checked.</li>
+        <li>The address bar always holds a link to the exact view you are looking at, to share or embed.</li>
+      </ol>
+      <p><b>Data:</b> NASA SPHEREx Level 2 images from the NASA/IPAC Infrared Science Archive
+        (IRSA, <a href="https://doi.org/10.26131/IRSA678" target="_blank" rel="noopener">doi:10.26131/IRSA678</a>),
+        read from IRSA's public copy on AWS. Gaia DR3 (ESA/Gaia/DPAC). Sky context: Aladin Lite (CDS) with AllWISE
+        images. Positions moved to 2026.0 with each object's proper motion. Fluxes use a nominal pixel size, so
+        they are approximate.</p>
+      <p><b>Made by</b> Blink Hunters for the NASA Space Apps Challenge 2026 ("Planet X and SPHEREx").
+        Code written with an AI assistant (Claude) at the team's direction. Source:
+        <a href="https://github.com/KTapas27/spherex-blink-hunters" target="_blank" rel="noopener">GitHub</a>.
+        Inspired by WiseView and Backyard Worlds.</p>
+    </details>
   </aside>
 
   <main>

@@ -41,9 +41,25 @@ async function api(path, opts) {
   return res.json();
 }
 
+const escHtml = (s) => String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+let PRESETS = [];
+const presetFor = (q) => PRESETS.find((p) => p.query.toLowerCase() === q.trim().toLowerCase());
+
+// A test-target button: load it with the settings that show it best.
+function applyPreset(p) {
+  $("#q").value = p.query;
+  $("#fov").value = "0.1";
+  $("#per_group").value = String(p.n);
+  Object.assign(state, { det: p.det, mode: p.mode, matched: false, channel: null, ref: "prev", combo: {} });
+  $("#matched").checked = false;
+  loadView();
+}
+
 async function loadView() {
   const body = { q: $("#q").value.trim(), fov: +$("#fov").value, per_group: +$("#per_group").value };
   if (!body.q) return;
+  state.tip = presetFor(body.q)?.note || "";
+  state.note = "";
   writeHash();
   setStatus("Resolving target…", 0);
   $("#go").disabled = true;
@@ -52,6 +68,7 @@ async function loadView() {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
     });
     state.key = job.key;
+    state.note = job.note || "";
     while (job.status !== "done" && job.status !== "error") {
       const pct = job.total ? job.done / job.total : 0;
       setStatus(`${job.message || job.status}${job.total ? ` (${job.done}/${job.total})` : ""}`, pct);
@@ -264,7 +281,8 @@ function renderInfo(m) {
   const pm = Math.hypot(t.pmra, t.pmdec) / 1000;
   const visits = m.visits.map((v) => `<tr><td>Visit ${v.visit + 1}</td><td>${v.start} → ${v.end}</td><td>${v.n} img</td></tr>`).join("");
   $("#info").hidden = false;
-  $("#info").innerHTML = `
+  const tips = [state.note, state.tip].filter(Boolean).map((s) => `<p class="tip">${escHtml(s)}</p>`).join("");
+  $("#info").innerHTML = `${tips}
     <div><b>${t.name}</b></div>
     <div>RA ${t.ra.toFixed(5)}°, Dec ${t.dec.toFixed(5)}° (epoch 2026.0)</div>
     <div>Proper motion ${pm.toFixed(2)}″/yr${t.parallax ? ` · parallax ${t.parallax.toFixed(1)} mas` : ""}</div>
@@ -355,7 +373,7 @@ function drawLightCurve() {
       scales: {
         x: { ticks: { color: "#9a94b4", callback: (v) => new Date(v).toISOString().slice(0, 7), maxTicksLimit: 6 },
              grid: { color: "rgba(167, 139, 250, 0.12)" } },
-        y: { title: { display: true, text: "Flux (mJy)", color: "#9a94b4" }, ticks: { color: "#9a94b4" }, grid: { color: "rgba(167, 139, 250, 0.12)" } },
+        y: { title: { display: true, text: "Flux (mJy, approx.)", color: "#9a94b4" }, ticks: { color: "#9a94b4" }, grid: { color: "rgba(167, 139, 250, 0.12)" } },
       },
       plugins: {
         legend: { labels: { color: "#ece8ff" } },
@@ -439,7 +457,7 @@ function drawSpectrum(points, nFlagged = 0) {
       animation: false,
       scales: {
         x: { title: { display: true, text: "Wavelength (µm)", color: "#9a94b4" }, ticks: { color: "#9a94b4" }, grid: { color: "rgba(167, 139, 250, 0.12)" } },
-        y: { title: { display: true, text: "Flux (mJy)", color: "#9a94b4" }, ticks: { color: "#9a94b4" }, grid: { color: "rgba(167, 139, 250, 0.12)" } },
+        y: { title: { display: true, text: "Flux (mJy, approx.)", color: "#9a94b4" }, ticks: { color: "#9a94b4" }, grid: { color: "rgba(167, 139, 250, 0.12)" } },
       },
       plugins: { legend: { labels: { color: "#ece8ff" } } },
     },
@@ -589,13 +607,12 @@ async function updateAladin(m) {
 
 // ---------- wiring ----------
 async function init() {
-  const presets = await api("/api/presets").catch(() => []);
-  const esc = (s) => s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
-  $("#presets").innerHTML = presets.map((p) =>
-    `<button type="button" title="${esc(p.note)}" data-q="${esc(p.query)}">${esc(p.label)}</button>`).join("");
+  PRESETS = await api("/api/presets").catch(() => []);
+  $("#presets").innerHTML = PRESETS.map((p, i) =>
+    `<button type="button" title="${escHtml(p.note)}" data-i="${i}">${escHtml(p.label)}</button>`).join("");
   $("#presets").onclick = (e) => {
     const b = e.target.closest("button");
-    if (b) { $("#q").value = b.dataset.q; loadView(); }
+    if (b) applyPreset(PRESETS[+b.dataset.i]);
   };
   $("#search").onsubmit = (e) => { e.preventDefault(); loadView(); };
   $("#mode").onclick = (e) => { const b = e.target.closest("button"); if (b) { state.mode = b.dataset.mode; selectFrames(); } };
@@ -647,5 +664,6 @@ function applyHash() {
   if (h.ch !== undefined) { state.matched = true; state.channel = +h.ch; }
   if (h.ra && h.dec && !h.q) h.q = `${h.ra} ${h.dec}`;
   if (h.q) { $("#q").value = h.q; loadView(); }
+  else if (PRESETS.length) applyPreset(PRESETS[0]); // first visit: show something moving right away
 }
 init();

@@ -111,7 +111,8 @@ def find_exposures(ra, dec):
                     return exposures
                 raise ArchiveUnavailable(
                     "The NASA/IPAC archive (IRSA) is not answering right now "
-                    f"({_short(err)}). This is on IRSA's side; please try again in a few minutes.") from err
+                    f"({_short(err)}). This is on IRSA's side; please try again in a few minutes. "
+                    "The five test targets (buttons under the search box) still work, from saved data.") from err
             age_h = (time.time() - saved["fetched"]) / 3600
             log.warning("IRSA unavailable (%s); using exposure list saved %.1f h ago", err, age_h)
             exposures = [Exposure(**e) for e in saved["exposures"]]

@@ -42,9 +42,10 @@ def api_resolve(q: str):
 def create_view(req: ViewRequest):
     try:
         key = pipeline.start_view(req.q, req.fov, req.per_group)
+        note = resolve.resolve(req.q).note  # cached: no second lookup
     except LookupError as err:
         raise HTTPException(404, str(err))
-    return {"key": key, **(pipeline.job(key) or {})}
+    return {"key": key, "note": note, **(pipeline.job(key) or {})}
 
 
 @app.get("/api/views/{key}")

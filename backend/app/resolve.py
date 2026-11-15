@@ -8,6 +8,7 @@ import xml.etree.ElementTree as ET
 from dataclasses import dataclass, asdict
 
 import astropy.units as u
+import numpy as np
 import requests
 from astropy.coordinates import Distance, SkyCoord
 from astropy.time import Time
@@ -27,6 +28,7 @@ class Target:
     pmdec: float
     parallax: float | None  # mas
     moved_arcsec: float  # J2000 -> VIEW_EPOCH
+    note: str = ""  # e.g. "coordinates matched to a known fast-moving object"
 
     def as_dict(self):
         return asdict(self)
@@ -42,7 +44,9 @@ KNOWN = {
     "eps ind b": dict(name="* eps Ind B", ra=331.04414658852124, dec=-56.78284419511611,
                       pmra=3981.977, pmdec=-2466.832, parallax=270.658),
     "wise j085510.83-071442.5": dict(name="WISEA J085510.74-071442.5", ra=133.81890825, dec=-7.247048,
-                                     pmra=-8123.7, pmdec=673.2, parallax=439.0),
+                                     pmra=-8123.7, pmdec=673.2, parallax=439.0,
+                                     hint="It is faint and only glows at 4-5 µm: choose 'all' exposures and "
+                                          "the Colour or D6 view to see it."),
     "rw aur": dict(name="V* RW Aur", ra=76.95652603458, dec=30.40143817389,
                    pmra=7.23, pmdec=-20.33, parallax=15.42),
     "r dra": dict(name="V* R Dra", ra=248.16761083295, dec=66.75497941722,
@@ -95,13 +99,41 @@ def _parse_coords(text):
     return SkyCoord(text, unit=unit)
 
 
+# A typed position within this distance of a known fast mover's track (any epoch 1990-2030) is
+# taken to mean that object, so its proper motion is applied. Catalogue coordinates of nearby stars
+# and brown dwarfs are often decades old: the challenge's own WISE 0855 position is ~2' from where
+# the brown dwarf is in 2026, which would put it outside a 6' view.
+MATCH_RADIUS_ARCSEC = 30.0
+MATCH_MIN_PM_MAS = 100.0
+
+
+def _match_known(c):
+    years = np.arange(-10.0, 30.25, 0.25)  # offsets from J2000
+    for info in KNOWN.values():
+        if np.hypot(info["pmra"], info["pmdec"]) < MATCH_MIN_PM_MAS:
+            continue
+        cosd = np.cos(np.radians(info["dec"]))
+        track = SkyCoord(info["ra"] + info["pmra"] * years / 3.6e6 / cosd,
+                         info["dec"] + info["pmdec"] * years / 3.6e6, unit="deg")
+        if c.separation(track).arcsec.min() < MATCH_RADIUS_ARCSEC:
+            return info
+    return None
+
+
 def resolve(query, pmra=None, pmdec=None):
     """Resolve `query`; explicit pmra/pmdec (mas/yr) override catalogue motion for coordinates."""
     query = query.strip()
+    note = ""
     if _COORD_RE.match(query):
         c = _parse_coords(query)
-        info = dict(name=c.to_string("hmsdms", precision=1), ra=c.ra.deg, dec=c.dec.deg,
-                    pmra=pmra or 0.0, pmdec=pmdec or 0.0, parallax=None)
+        known = _match_known(c) if pmra is None and pmdec is None else None
+        if known:
+            info = known
+            note = (f"Your coordinates match {known['name']}, a fast-moving object, so the view follows it "
+                    f"to where it is in {config.VIEW_EPOCH[:4]}. {known.get('hint', '')}").strip()
+        else:
+            info = dict(name=c.to_string("hmsdms", precision=1), ra=c.ra.deg, dec=c.dec.deg,
+                        pmra=pmra or 0.0, pmdec=pmdec or 0.0, parallax=None)
     else:
         info = _cached_sesame(query)
 
@@ -115,5 +147,5 @@ def resolve(query, pmra=None, pmdec=None):
     return Target(
         query=query, name=info["name"], ra=float(now.ra.deg), dec=float(now.dec.deg),
         ra_j2000=info["ra"], dec_j2000=info["dec"], pmra=info["pmra"], pmdec=info["pmdec"],
-        parallax=info["parallax"], moved_arcsec=float(c2000.separation(now).arcsec),
+        parallax=info["parallax"], moved_arcsec=float(c2000.separation(now).arcsec), note=note,
     )

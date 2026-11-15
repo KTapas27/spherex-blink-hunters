@@ -40,6 +40,12 @@ for q in queries:
             break
         time.sleep(2)
     m = state.get("manifest") or {}
+    if state["status"] == "done":
+        try:  # save the target's own spectrum, so the first click on a slow server is instant
+            pts, _ = pipeline.view_spectrum(key, m["target"]["ra"], m["target"]["dec"])
+            print(f"  target spectrum: {len(pts)} points saved")
+        except Exception as err:
+            print(f"  target spectrum not saved ({err}); it will be measured live")
     if state["status"] == "error":
         failed.append(q)
     elif args.gaia:
