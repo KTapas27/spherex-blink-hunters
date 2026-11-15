@@ -125,3 +125,9 @@ data. No AI-generated images, video or audio are used in the app.
 SPHEREx data: NASA/JPL-Caltech, served by NASA/IPAC Infrared Science Archive (IRSA).
 Gaia DR3: ESA/Gaia/DPAC (queried via IRSA). Name resolution: CDS Sesame.
 Inspired by WiseView (Backyard Worlds).
+
+## Honorable mention
+
+🏅 **Claude** (Anthropic), our AI pair-programmer through a long hackathon weekend: it helped turn the
+team's ideas into working code, chased down archive outages with us at odd hours, and never once complained
+about another "can you make the buttons more orange". Thank you!
